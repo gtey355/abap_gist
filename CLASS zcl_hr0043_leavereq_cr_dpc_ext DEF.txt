@@ -6,6 +6,7 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext DEFINITION
   PUBLIC SECTION.
 
     CONSTANTS gc_memory_id TYPE char20 VALUE 'HR0043_LEAVEREQ_DPCE' ##NO_TEXT.
+    CONSTANTS gc_memory_second_id TYPE char22 VALUE 'HR0043_LEAVEREQ_DPCE_2' ##NO_TEXT.
 
     METHODS /iwbep/if_mgw_appl_srv_runtime~execute_action
         REDEFINITION .
@@ -25,6 +26,8 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext DEFINITION
         REDEFINITION .
     METHODS timeaccountcolle_get_entityset
         REDEFINITION .
+    METHODS calculate_leave_duration
+        REDEFINITION .
   PRIVATE SECTION.
 ENDCLASS.
 
@@ -43,6 +46,7 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
     DATA: lv_time TYPE e_edmtimefrom.
     DATA: lv_convdate TYPE c LENGTH 14.
     DATA: ls_available_quota TYPE hcmfab_s_quota_avail.
+    DATA: ls_leave_duration  TYPE hcmfab_s_leave_span.
 
     TRY.
         super->/iwbep/if_mgw_appl_srv_runtime~execute_action(
@@ -62,6 +66,11 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
             ls_available_quota = me->zcalculate_available_quota( io_tech_request_context ).
 
             copy_data_to_ref( EXPORTING is_data = ls_available_quota
+                              CHANGING cr_data  = er_data ).
+          WHEN 'ZCalculateLeaveSpan'.
+            ls_leave_duration = me->calculate_leave_duration( io_tech_request_context ).
+
+            copy_data_to_ref( EXPORTING is_data = ls_leave_duration
                               CHANGING cr_data  = er_data ).
           WHEN 'ZGetHire'.
             READ TABLE it_parameter INTO DATA(ls_key)
@@ -325,13 +334,16 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
                                   ev_rest_adv_days = lv_rest_adv_days "остаток флаг1
            ).
 
-          IF ( lv_check_take_hiddenadvance EQ 'A' OR lv_check_take_hiddenadvance EQ 'G' )
-            AND  NOT line_exists( lt_messages[ 1 ] ).
+          IF ( lv_check_take_hiddenadvance EQ 'A' OR lv_check_take_hiddenadvance EQ 'G')
+             AND  NOT line_exists( lt_messages[ 1 ] ).
             TRY.
-                " перед выдачей предупреждения об авансе проверяем что нет других ошибок от пользовательстких проверок
+                " перед выдачей предупреждения об авансе проверяем что нет других ошибок
+                " от пользовательстких проверок
                 " если нет - то создаем заявку и проверяем, есть ли в ней ошибки
                 " если ошибки в заявке есть - то их отправляем вместе с остальными
                 " если ошибок в заявке нет - выдаем предупреждение об авансе
+                EXPORT lf_no_check_second FROM abap_true
+                TO MEMORY ID zcl_hr0043_leavereq_cr_dpc_ext=>gc_memory_second_id.
 
                 super->leaverequestcoll_create_entity(
                      EXPORTING
@@ -360,6 +372,16 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
                   iv_add_to_response_header = abap_true
                   iv_entity_type           = iv_entity_name
             ).
+*          ELSEIF lv_check_take_hiddenadvance EQ 'G' AND  NOT line_exists( lt_messages[ 1 ] ).
+*            " еслт новая генерация - сразу выдаем предупреждение об авансе
+*            lt_messages = VALUE #( type = 'E' id = 'ZHR0043_MSG' number = '006' message_v1 = 'G'  ( ) ).
+*            lo_message_container->add_messages_from_bapi(
+*                  it_bapi_messages         = lt_messages
+*                  iv_determine_leading_msg = /iwbep/if_message_container=>gcs_leading_msg_search_option-last
+*                  iv_add_to_response_header = abap_true
+*                  iv_entity_type           = iv_entity_name
+*             ).
+
           ELSEIF lv_check_take_hiddenadvance EQ 'E'.
             lt_messages = VALUE #( type = 'E' id = 'ZHR0043_MSG' number = '000' message_v1 = lv_numd  ( ) ).
             lo_message_container->add_messages_from_bapi(
@@ -400,7 +422,7 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
         "save original messages
         lt_saved_messages =  lo_message_container->get_messages( ). "#EC CI_CONV_OK there is standard
 
-        " ----- 1 check
+        " ----- 1 check - игнорируем, так как обработка идет по другому алгоритму
         TRY.
             ls_changed_msg =
             lt_saved_messages[ number = '014' id = 'HRTIM00REC' type = 'E' ]. "#EC CI_STDSEQ  определено в стандарте
@@ -410,63 +432,7 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
         ENDTRY.
 
         IF  ls_changed_msg IS NOT INITIAL.
-          " --- проверяем вид остутствия и судимость
-          zcl_hr0043_utils=>get_sud(
-                      EXPORTING
-                        iv_pernr =  ls_ui_leave_request-employee_number
-                      IMPORTING
-                        ev_sud  = DATA(lv_sud)
-          ).
 
-          IF ls_ui_leave_request-absence_type EQ lv_abex.
-            lv_check_cond = abap_false.
-          ELSEIF ls_ui_leave_request-absence_type EQ lv_excs AND lv_sud EQ abap_true.
-            lv_check_cond = abap_false.
-          ELSEIF ls_ui_leave_request-absence_type EQ lv_abcn AND lv_sud EQ abap_false.
-            lv_check_cond = abap_false.
-          ELSE.
-            lv_check_cond = abap_true.
-          ENDIF.
-
-          IF  lv_check_cond EQ abap_false.
-            zcl_hr0043_utils=>change_standard_message(
-                     EXPORTING
-                       iv_entity_name          = iv_entity_name
-                       is_changed_message      = ls_changed_msg
-                       iv_new_id               = 'ZHR0043_MSG'
-                       iv_new_number           = '000'
-                       CHANGING
-                          co_message_container =  lo_message_container
-            ).
-
-
-          ENDIF.
-
-          "--------- проверяем лимит
-          CLEAR lv_check_cond.
-          lv_check_cond = zcl_hr0043_utils=>check_condition_for_1check(
-            EXPORTING
-               is_leave_request = ls_ui_leave_request
-            IMPORTING
-               ev_diff2006 = lv_diff2006
-               ev_etag     = lv_etag
-               ev_plan     = lv_plan
-          ).
-          " обрабатываем вывод ошибки в зависимости от результатов проверки
-* !!! TEST
-          "lv_check_cond = abap_true.
-
-          IF  lv_check_cond EQ abap_false.
-            zcl_hr0043_utils=>change_standard_message(
-                     EXPORTING
-                       iv_entity_name          = iv_entity_name
-                       is_changed_message      = ls_changed_msg
-                       iv_new_id               = 'ZHR0043_MSG'
-                       iv_new_number           = '000'
-                       CHANGING
-                         co_message_container =  lo_message_container
-            ).
-          ENDIF.
 
         ENDIF. " --1 check
 
@@ -833,5 +799,68 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
 
     ENDIF.
 *<<<
+  ENDMETHOD.
+
+
+  METHOD calculate_leave_duration.
+    DATA: lt_parameters    TYPE SORTED TABLE OF /iwbep/s_mgw_name_value_pair  WITH UNIQUE KEY name,
+          ls_key           LIKE LINE OF lt_parameters,
+          lv_pernr         TYPE pernr_d,
+          lv_begda         TYPE begda,
+          lv_endda         TYPE endda,
+          lv_rest_adv_days TYPE ptm_quonum VALUE 0.
+
+
+    lt_parameters = io_tech_request_context->get_parameters( ).
+
+    READ TABLE lt_parameters INTO ls_key WITH TABLE KEY name = 'EMPLOYEEID'.
+    IF sy-subrc EQ 0.
+      lv_pernr = ls_key-value.
+    ENDIF.
+
+    READ TABLE lt_parameters INTO ls_key WITH KEY name = 'STARTDATE'.
+    IF sy-subrc EQ 0.
+      lv_begda = ls_key-value.
+    ENDIF.
+
+    READ TABLE lt_parameters INTO ls_key WITH KEY name = 'ENDDATE'.
+    IF sy-subrc EQ 0.
+      lv_endda = ls_key-value.
+    ENDIF.
+
+    CALL METHOD super->calculate_leave_duration
+      EXPORTING
+        io_tech_request_context = io_tech_request_context
+      RECEIVING
+        rs_leave_duration       = rs_leave_duration
+      EXCEPTIONS
+        it0001_not_found        = 1
+        OTHERS                  = 2.
+    IF sy-subrc <> 0.
+      RETURN.
+    ENDIF.
+
+    DATA(lv_check_take_hiddenadvance) =  zcl_hr0043_utils=>check_take_hidden_advance(
+                                  EXPORTING
+                                    iv_pernr = lv_pernr
+                                    iv_begda = lv_begda
+                                    iv_endda = lv_endda
+                                  IMPORTING
+                                    ev_rest_adv_days = lv_rest_adv_days
+    ).
+    IF lv_check_take_hiddenadvance IS INITIAL. " укладываемся в сущ диапазон значений
+      RETURN.
+    ELSEIF lv_check_take_hiddenadvance EQ 'G'. "лимита еще нет, lv_rest_adv_days - дельта в счет аванса
+      rs_leave_duration-abrtg = lv_rest_adv_days.
+      rs_leave_duration-time_unit_text = 'day'.
+
+    ELSEIF lv_check_take_hiddenadvance EQ 'A'."лимит есть, lv_rest_adv_days - остаток флаг1
+      rs_leave_duration-abrtg = lv_rest_adv_days.
+      rs_leave_duration-time_unit_text = 'day'.
+
+    ELSE. " E ошибка
+      RETURN.
+    ENDIF.
+
   ENDMETHOD.
 ENDCLASS.
