@@ -5,8 +5,8 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext DEFINITION
 
   PUBLIC SECTION.
 
-    CONSTANTS gc_memory_id TYPE char20 VALUE 'HR0043_LEAVEREQ_DPCE' ##NO_TEXT.
-    CONSTANTS gc_memory_second_id TYPE char22 VALUE 'HR0043_LEAVEREQ_DPCE_2' ##NO_TEXT.
+    CONSTANTS mc_memory_id TYPE char20 VALUE 'HR0043_LEAVEREQ_DPCE' ##NO_TEXT.
+    CONSTANTS mc_memory_second_id TYPE char22 VALUE 'HR0043_LEAVEREQ_DPCE_2' ##NO_TEXT.
 
     METHODS /iwbep/if_mgw_appl_srv_runtime~execute_action
         REDEFINITION .
@@ -47,6 +47,7 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
     DATA: lv_convdate TYPE c LENGTH 14.
     DATA: ls_available_quota TYPE hcmfab_s_quota_avail.
     DATA: ls_leave_duration  TYPE hcmfab_s_leave_span.
+    DATA: lv_value TYPE /iwbep/s_mgw_name_value_pair-name.
 
     TRY.
         super->/iwbep/if_mgw_appl_srv_runtime~execute_action(
@@ -62,85 +63,75 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
 
         CASE iv_action_name.
 
-          WHEN 'ZCalculateQuotaAvailable'.
+          WHEN zcl_hr0043_utils=>mc_action1. "'ZCalculateQuotaAvailable'.
             ls_available_quota = me->zcalculate_available_quota( io_tech_request_context ).
-
             copy_data_to_ref( EXPORTING is_data = ls_available_quota
-                              CHANGING cr_data  = er_data ).
-          WHEN 'ZCalculateLeaveSpan'.
+                                   CHANGING cr_data  = er_data ).
+
+          WHEN zcl_hr0043_utils=>mc_action2. "'ZCalculateLeaveSpan'.
             ls_leave_duration = me->calculate_leave_duration( io_tech_request_context ).
-
             copy_data_to_ref( EXPORTING is_data = ls_leave_duration
-                              CHANGING cr_data  = er_data ).
-          WHEN 'ZGetHire'.
-            READ TABLE it_parameter INTO DATA(ls_key)
-                WITH KEY name = 'EmployeeID'. "#EC CI_STDSEQ определено в стандарте
-            IF sy-subrc EQ 0.
-              DATA(lv_pernr) = ls_key-value.
-            ENDIF.
-            ls_controls = zcl_hr0043_utils=>get_hire( EXPORTING iv_pernr = CONV #( lv_pernr ) ).
+                       CHANGING cr_data  = er_data ).
 
+          WHEN zcl_hr0043_utils=>mc_action3. "'ZGetHire'.
+            zcl_hr0043_utils=>read_param( EXPORTING it_param = it_parameter
+                                                     iv_name =   CONV #( zcl_hr0043_utils=>mc_employp )
+                                          IMPORTING ev_value = lv_value
+                                        ).
+            ls_controls = zcl_hr0043_utils=>get_hire( EXPORTING iv_pernr = CONV #( lv_value ) ).
             copy_data_to_ref( EXPORTING is_data = ls_controls
-                              CHANGING cr_data  = er_data ).
+                    CHANGING cr_data  = er_data ).
 
-          WHEN 'checkAbsenceFromParam'.
-            READ TABLE it_parameter INTO ls_key
-                WITH KEY name = 'Subty' ##NO_TEXT. "#EC CI_STDSEQ определено в стандарте
-
-            IF sy-subrc EQ 0.
-              DATA(lv_subty) = ls_key-value.
-            ENDIF.
-            ls_controls-zz_check_disp = zcl_hr0043_utils=>check_disp( EXPORTING iv_subty = CONV #( lv_subty ) ).
-
+          WHEN zcl_hr0043_utils=>mc_action4.  "'checkAbsenceFromParam'.
+            zcl_hr0043_utils=>read_param( EXPORTING it_param = it_parameter
+                                             iv_name =   CONV #( zcl_hr0043_utils=>mc_subtyp )
+                                  IMPORTING ev_value = lv_value
+                                ).
+            ls_controls-zz_check_disp = zcl_hr0043_utils=>check_disp( EXPORTING iv_subty = CONV #( lv_value ) ).
             copy_data_to_ref( EXPORTING is_data = ls_controls
-                              CHANGING cr_data  = er_data ).
+                                         CHANGING cr_data  = er_data ).
+          WHEN zcl_hr0043_utils=>mc_action5. "'checkCE'.
 
-          WHEN 'checkCE'.
-            READ TABLE it_parameter INTO ls_key
-                WITH KEY name = 'EmployeeID'. "#EC CI_STDSEQ определено в стандарте.
-            IF sy-subrc EQ 0.
-              lv_pernr = ls_key-value.
-            ENDIF.
-            ls_controls = zcl_hr0043_utils=>get_ce( EXPORTING iv_pernr = CONV #( lv_pernr ) ).
+            zcl_hr0043_utils=>read_param( EXPORTING it_param = it_parameter
+                                                      iv_name =   CONV #( zcl_hr0043_utils=>mc_employp )
+                                           IMPORTING ev_value = lv_value
+                                         ).
 
+            ls_controls = zcl_hr0043_utils=>get_ce( EXPORTING iv_pernr = CONV #( lv_value ) ).
             copy_data_to_ref( EXPORTING is_data = ls_controls
-                              CHANGING cr_data  = er_data ).
-          WHEN 'checkSud'.
-            READ TABLE it_parameter INTO ls_key
-            WITH KEY name = 'EmployeeID'. "#EC CI_STDSEQ определено в стандарте
-            IF sy-subrc EQ 0.
-              lv_pernr = ls_key-value.
-            ENDIF.
-            ls_controls = zcl_hr0043_utils=>check_sud( EXPORTING iv_pernr = CONV #( lv_pernr ) ).
+                                         CHANGING cr_data  = er_data ).
 
+          WHEN zcl_hr0043_utils=>mc_action6. "'checkSud'.
+            zcl_hr0043_utils=>read_param( EXPORTING it_param = it_parameter
+                                                iv_name =   CONV #( zcl_hr0043_utils=>mc_employp )
+                                     IMPORTING ev_value = lv_value
+                                   ).
+            ls_controls = zcl_hr0043_utils=>check_sud( EXPORTING iv_pernr = CONV #( lv_value ) ).
             copy_data_to_ref( EXPORTING is_data = ls_controls
-                              CHANGING cr_data  = er_data ).
+                                         CHANGING cr_data  = er_data ).
 
-          WHEN 'checkFirstSign'.
-            READ TABLE it_parameter INTO ls_key
-            WITH KEY name = 'EmployeeID'. "#EC CI_STDSEQ определено в стандарте
-            IF sy-subrc EQ 0.
-              lv_pernr = ls_key-value.
-            ENDIF.
-            ls_controls = zcl_hr0043_utils=>get_xss_sign( EXPORTING iv_pernr = CONV #( lv_pernr ) ).
-
+          WHEN zcl_hr0043_utils=>mc_action7. "'checkFirstSign'.
+            zcl_hr0043_utils=>read_param( EXPORTING it_param = it_parameter
+                                                iv_name =   CONV #( zcl_hr0043_utils=>mc_employp )
+                                     IMPORTING ev_value = lv_value
+                                   ).
+            ls_controls = zcl_hr0043_utils=>get_xss_sign( EXPORTING iv_pernr = CONV #( lv_value ) ).
             copy_data_to_ref( EXPORTING is_data = ls_controls
-                              CHANGING cr_data  = er_data ).
+                                         CHANGING cr_data  = er_data ).
+          WHEN zcl_hr0043_utils=>mc_action8.  "'setFirstXssSign'.
+            zcl_hr0043_utils=>read_param( EXPORTING it_param = it_parameter
+                                                iv_name =   CONV #( zcl_hr0043_utils=>mc_employp )
+                                     IMPORTING ev_value = lv_value
+                                   ).
 
-          WHEN 'setFirstXssSign'.
-            READ TABLE it_parameter INTO ls_key
-            WITH KEY name = 'EmployeeID'. "#EC CI_STDSEQ определено в стандарте
-            IF sy-subrc EQ 0.
-              lv_pernr = ls_key-value.
-            ENDIF.
-
-            ls_controls = zcl_hr0043_utils=>set_xss_sign( EXPORTING iv_pernr = CONV #( lv_pernr ) ).
+            ls_controls = zcl_hr0043_utils=>set_xss_sign( EXPORTING iv_pernr = CONV #( lv_value ) ).
             IF ls_controls IS NOT INITIAL. " operation insert has errors
               copy_data_to_ref( EXPORTING is_data = ls_controls
                                 CHANGING cr_data  = er_data ).
             ENDIF.
 
         ENDCASE.
+
 
       CATCH /iwbep/cx_mgw_busi_exception.
       CATCH /iwbep/cx_mgw_tech_exception.
@@ -245,13 +236,14 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
         io_data_provider->read_entry_data( IMPORTING es_data = ls_ui_leave_request ).
 **"< 22.09.21 EzhovDA отключаем проверки дат для ZZ_REPEAT = ABAP_TRUE
         EXPORT lf_no_check FROM ls_ui_leave_request-zz_repeat
-    TO MEMORY ID zcl_hr0043_leavereq_cr_dpc_ext=>gc_memory_id.
+    TO MEMORY ID zcl_hr0043_leavereq_cr_dpc_ext=>mc_memory_id.
 **"/> 22.09.21 EzhovDA
 
 ** ---блок пользовательских проверок
 * выполняются только если заявка регистрируется первый раз
         IF ls_ui_leave_request-zz_repeat EQ abap_false.
-*        " ---- проверка на аванс, берущийся повторно - выполняется только если запрос публикуется впервые zz_repeat eq abap_false
+*        " ---- проверка на аванс, берущийся повторно - выполняется только
+*         "--- если запрос публикуется впервые zz_repeat eq abap_false
 *        DATA(lv_second_advancepay) =  zcl_hr0043_utils=>check_second_advancepay(
 *                                        EXPORTING
 *                                          is_leave_request = ls_ui_leave_request
@@ -266,7 +258,7 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
 **          ).
 *        ENDIF.
 *-------- проверка ТН на диспансеризацию 2006
-          IF  ls_ui_leave_request-absence_type EQ lv_sub2006 .
+          IF  ls_ui_leave_request-absence_type EQ lv_sub2006.
             DATA(lv_disp) = zcl_hr0043_utils=>get_disp(
             EXPORTING
               iv_pernr = ls_ui_leave_request-employee_number
@@ -274,7 +266,7 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
               iv_begda = ls_ui_leave_request-begda
             ).
 
-            IF  lv_disp EQ abap_true .
+            IF  lv_disp EQ abap_true.
               lt_messages = VALUE #( type = 'E' id = 'ZHR0043_MSG' number = '002'  ( ) ).
               lo_message_container->add_messages_from_bapi(
                     it_bapi_messages         = lt_messages
@@ -293,7 +285,7 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
                                    iv_endda = ls_ui_leave_request-endda
           ).
 
-          IF lv_crossplan EQ abap_true .
+          IF lv_crossplan EQ abap_true.
 
             lt_messages = VALUE #( type = 'E' id = 'ZHR0043_MSG' number = '004'  ( ) ).
             lo_message_container->add_messages_from_bapi(
@@ -334,7 +326,7 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
                                   ev_rest_adv_days = lv_rest_adv_days "остаток флаг1
            ).
 
-          IF ( lv_check_take_hiddenadvance EQ 'A' OR lv_check_take_hiddenadvance EQ 'G')
+          IF ( lv_check_take_hiddenadvance EQ 'A' OR lv_check_take_hiddenadvance EQ 'G' )
              AND  NOT line_exists( lt_messages[ 1 ] ).
             TRY.
                 " перед выдачей предупреждения об авансе проверяем что нет других ошибок
@@ -343,7 +335,7 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
                 " если ошибки в заявке есть - то их отправляем вместе с остальными
                 " если ошибок в заявке нет - выдаем предупреждение об авансе
                 EXPORT lf_no_check_second FROM abap_true
-                TO MEMORY ID zcl_hr0043_leavereq_cr_dpc_ext=>gc_memory_second_id.
+                TO MEMORY ID zcl_hr0043_leavereq_cr_dpc_ext=>mc_memory_second_id.
 
                 super->leaverequestcoll_create_entity(
                      EXPORTING
@@ -432,8 +424,7 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
         ENDTRY.
 
         IF  ls_changed_msg IS NOT INITIAL.
-
-
+          " dummy
         ENDIF. " --1 check
 
         " ------ 3 check
@@ -593,10 +584,11 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
 
   METHOD timeaccountcolle_get_entityset.
 
+    DATA: lv_pernr TYPE pernr_d.
     DATA: lt_pernr TYPE pernr_tab.
+    DATA: lt_limit TYPE RANGE OF subty.
     DATA: ls_filter LIKE LINE OF it_filter_select_options.
     DATA: lv_startdate TYPE begda.
-    DATA: lt_limit TYPE RANGE OF subty.
 
     TRY.
         super->timeaccountcolle_get_entityset(
@@ -627,8 +619,8 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
         READ TABLE it_filter_select_options INTO ls_filter
             WITH KEY property = 'EmployeeID'. "#EC CI_STDSEQ определено в стандарте
         IF sy-subrc EQ 0.
-          DATA(ls_sel) = ls_filter-select_options[ 1 ]-low.
-          APPEND ls_sel TO lt_pernr.
+          lv_pernr = ls_filter-select_options[ 1 ]-low.
+          APPEND lv_pernr TO lt_pernr.
         ENDIF.
 
         READ TABLE it_filter_select_options INTO ls_filter
@@ -638,28 +630,39 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
             lv_startdate = ls_filter-select_options[ 1 ]-low.
           ENDIF.
         ENDIF.
-
         " получаем лимиты
         lt_limit = VALUE #(
          FOR ls_entityset IN et_entityset
            ( sign = 'I' option = 'EQ' low = ls_entityset-time_type )
         ).
 
+*        zcl_hr0043_utils=>external_run(
+*            EXPORTING
+*                iv_pernr = lv_pernr
+*                iv_begda = lv_startdate
+*                it_limit = lt_limit
+*        ).
+
+        cl_salv_bs_runtime_info=>set(
+               display        = abap_false
+               metadata       = abap_false
+               data           = abap_true
+           ).
 
         CALL FUNCTION 'HR_READ_INFOTYPE_AUTHC_DISABLE'.
 
+        DATA(go_balance) = NEW zcl_hr0135_leave_balance(
+              iv_date  = lv_startdate
+              it_pernr = lt_pernr
+              ir_limit = lt_limit
+        ).
 
-*        DATA(lo_balance) = NEW zcl_hr0135_leave_balance(
-*              "ir_absen = s_absen[]
-*              iv_date  = lv_startdate
-*              it_pernr = lt_pernr
-*              ir_limit = lt_limit
-*        ).
-*
-*        DATA(lt_pernr_res) = lo_balance->get_leave_balance_old( " Готов новый метод, возвращаюший данные в плоском виде
-*            iv_with_adiitional_data = abap_true
-*            iv_future               = abap_false
-*        ).
+        DATA(gt_pernr_res) = go_balance->get_leave_balance(
+            iv_future               = abap_false"p_future
+        ).
+
+        cl_salv_bs_runtime_info=>clear_all( ).
+
 
         " заполняем entity set
         LOOP AT et_entityset ASSIGNING FIELD-SYMBOL(<fs_entityset>).
@@ -710,10 +713,11 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
           ls_time_account       LIKE LINE OF lt_time_accounts,
           ls_time_account_help  LIKE LINE OF lt_time_accounts,
           lo_hcm_att_abs_bl_api TYPE REF TO cl_hcmfab_att_abs_bl_apis,
-          lv_amount             TYPE abrtg,
           lv_sum_flag1          TYPE ptm_quonum VALUE 0,
           lv_bal_quota          TYPE ptm_quonum.            "RAG2557290
-
+    DATA: lv_diff2006_days TYPE ptm_quonum VALUE 0.
+    DATA: lv_p000_days TYPE ptm_quonum VALUE 0.
+    DATA: lv_avail_days TYPE ptm_quonum VALUE 0.
 
     CLEAR rs_available_quota.
 
@@ -754,21 +758,31 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    zcl_hr0043_utils=>remove_future_absence(
+    " сумма diff из 2006
+    zcl_hr0043_utils=>get_diff_2006(
         EXPORTING iv_pernr = lv_pernr
-                  iv_subty = 'P000'
-        IMPORTING ev_amount = lv_amount
+        IMPORTING ev_diff2006_days  = lv_diff2006_days
     ).
+    "  сумма Р000 из 2001
+    zcl_hr0043_utils=>get_p000_2001(
+        EXPORTING iv_pernr = lv_pernr
+        IMPORTING ev_p000_days  = lv_p000_days
+    ).
+    lv_avail_days = lv_diff2006_days - lv_p000_days.
 
+    " определяем есть ли лимиты будущих периодов
+    DATA(lv_is_limits) = zcl_hr0043_utils=>check_future_limit_exists(
+        EXPORTING
+            iv_pernr = lv_pernr
+            iv_ktart = '01' " TODO
+        IMPORTING
+            ev_sum_flag1 = lv_sum_flag1
+    ).
+    " если есть ЛБП выводим флаг1
+    IF lv_is_limits EQ abap_true.
+      lv_avail_days = lv_sum_flag1.
+    ENDIF.
 
-* ---> Start of RAG2557290
-*   Calculate the total balance available in case of Leave with multiple quotas
-    LOOP AT lt_time_accounts ASSIGNING FIELD-SYMBOL(<fs_time_account_help>)
-    WHERE deduct_begin LE sy-datum AND deduct_end GE sy-datum. "#EC CI_STDSEQ определено в стандарте
-
-      lv_bal_quota = lv_bal_quota + <fs_time_account_help>-balance_rest_posted_requested.
-    ENDLOOP.
-* <--- End of RAG2557290
 
 * Begin of Note 2680898
     IF lv_bal_quota EQ 1 AND ls_time_account-time_unit IS NOT INITIAL AND ls_time_account-time_unit NE '99'. "LAK2794663
@@ -783,22 +797,10 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
     rs_available_quota-time_type_text                = ls_time_account-time_type_text.
     rs_available_quota-time_unit_text                = ls_time_account-time_unit_text.
     rs_available_quota-balance_quantity_rest_posted  = ls_time_account-balance_quantity_rest_posted.
-    rs_available_quota-balance_rest_posted_requested = lv_bal_quota - lv_amount. "RAG2557290
+    rs_available_quota-balance_rest_posted_requested =  lv_avail_days. " zhr043 "lv_bal_quota. "RAG2557290
 
-*>>> zhr0043 если есть лимит буд периодов, выводим флаг1 из него
-    " определяем есть ли лимиты будущих периодов
-    DATA(lv_is_limits) = zcl_hr0043_utils=>check_future_limit_exists(
-        EXPORTING
-        iv_pernr = lv_pernr
-        iv_ktart = '01' " const - только для 01
-        IMPORTING
-        ev_sum_flag1 = lv_sum_flag1
-    ).
-    IF lv_is_limits EQ abap_true AND lv_sum_flag1 >= 0.
-      rs_available_quota-balance_rest_posted_requested = lv_sum_flag1.
 
-    ENDIF.
-*<<<
+
   ENDMETHOD.
 
 
@@ -808,14 +810,32 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
           lv_pernr         TYPE pernr_d,
           lv_begda         TYPE begda,
           lv_endda         TYPE endda,
-          lv_rest_adv_days TYPE ptm_quonum VALUE 0.
+          lv_abscode       TYPE subty,
+          lv_ktart         TYPE ktart,
+          lv_rest_adv_days TYPE ptm_quonum VALUE 0,
+          lv_avail_days    TYPE ptm_quonum VALUE 0,
+          lv_used_days     TYPE ptm_quonum VALUE 0.
+    DATA: lt_p2001 TYPE STANDARD TABLE OF p2001.
+    DATA: lt_p2001_filter TYPE SORTED TABLE OF p2001 WITH NON-UNIQUE KEY subty begda endda.
+    DATA: lv_e_tage TYPE ptm_quonum.
+    DATA: lv_flag1 TYPE ptm_quonum.
+    DATA: lv_diff2006_days TYPE ptm_quonum VALUE 0.
+    DATA: lv_p000_days TYPE ptm_quonum VALUE 0.
+    DATA: lv_avail_estim_days TYPE ptm_quonum VALUE 0.
 
+
+    DATA(lv_flag7days) = zcl_hr0130_param=>mv_flag. " 7 days
 
     lt_parameters = io_tech_request_context->get_parameters( ).
 
     READ TABLE lt_parameters INTO ls_key WITH TABLE KEY name = 'EMPLOYEEID'.
     IF sy-subrc EQ 0.
       lv_pernr = ls_key-value.
+    ENDIF.
+
+    READ TABLE lt_parameters INTO ls_key WITH TABLE KEY name = 'ABSENCETYPECODE'.
+    IF sy-subrc EQ 0.
+      lv_abscode = ls_key-value.
     ENDIF.
 
     READ TABLE lt_parameters INTO ls_key WITH KEY name = 'STARTDATE'.
@@ -828,39 +848,71 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
       lv_endda = ls_key-value.
     ENDIF.
 
-    CALL METHOD super->calculate_leave_duration
+    " get ktart
+    zcl_hr0043_utils=>get_ktart_by_abs(
+        EXPORTING iv_abscode = lv_abscode
+        IMPORTING ev_ktart = lv_ktart
+    ).
+
+    " сумма всех diff из 2006
+    zcl_hr0043_utils=>get_diff_2006(
+        EXPORTING iv_pernr = lv_pernr
+        IMPORTING ev_diff2006_days  = lv_diff2006_days
+    ).
+    "  сумма Р000 из 2001
+    zcl_hr0043_utils=>get_p000_2001(
+        EXPORTING iv_pernr = lv_pernr
+        IMPORTING ev_p000_days  = lv_p000_days
+    ).
+
+    lv_avail_days = lv_diff2006_days - lv_p000_days.
+
+
+    CALL FUNCTION 'DAYS_BETWEEN_TWO_DATES'
       EXPORTING
-        io_tech_request_context = io_tech_request_context
-      RECEIVING
-        rs_leave_duration       = rs_leave_duration
+        i_datum_bis             = lv_endda
+        i_datum_von             = lv_begda
+        i_kz_incl_bis           = '1'
+      IMPORTING
+        e_tage                  = lv_e_tage
       EXCEPTIONS
-        it0001_not_found        = 1
+        days_method_not_defined = 1
         OTHERS                  = 2.
     IF sy-subrc <> 0.
       RETURN.
     ENDIF.
 
+    " --- check limit
     DATA(lv_check_take_hiddenadvance) =  zcl_hr0043_utils=>check_take_hidden_advance(
                                   EXPORTING
                                     iv_pernr = lv_pernr
                                     iv_begda = lv_begda
                                     iv_endda = lv_endda
+                                    iv_ktart = lv_ktart
                                   IMPORTING
                                     ev_rest_adv_days = lv_rest_adv_days
     ).
-    IF lv_check_take_hiddenadvance IS INITIAL. " укладываемся в сущ диапазон значений
-      RETURN.
-    ELSEIF lv_check_take_hiddenadvance EQ 'G'. "лимита еще нет, lv_rest_adv_days - дельта в счет аванса
-      rs_leave_duration-abrtg = lv_rest_adv_days.
+    IF lv_check_take_hiddenadvance IS INITIAL. " укладываемся в сущ диапазон значений,
+      rs_leave_duration-abrtg = lv_e_tage. "lv_avail_days.
       rs_leave_duration-time_unit_text = 'day'.
+      lv_avail_estim_days = lv_avail_days.
 
-    ELSEIF lv_check_take_hiddenadvance EQ 'A'."лимит есть, lv_rest_adv_days - остаток флаг1
-      rs_leave_duration-abrtg = lv_rest_adv_days.
+    ELSEIF lv_check_take_hiddenadvance EQ 'G'. "лимита еще нет
+      rs_leave_duration-abrtg = lv_e_tage. "lv_avail_days + lv_flag7days. "7 days к остатку
       rs_leave_duration-time_unit_text = 'day'.
+      lv_avail_estim_days = lv_avail_days + lv_flag7days.
+
+    ELSEIF lv_check_take_hiddenadvance EQ 'A'."лимит есть,  остаток флаг1
+      rs_leave_duration-abrtg = lv_e_tage. "lv_rest_adv_days.
+      rs_leave_duration-time_unit_text = 'day'.
+      lv_avail_estim_days = lv_rest_adv_days.
 
     ELSE. " E ошибка
+      rs_leave_duration-abrtg = 0.
+      rs_leave_duration-time_unit_text = ''.
       RETURN.
     ENDIF.
+
 
   ENDMETHOD.
 ENDCLASS.
