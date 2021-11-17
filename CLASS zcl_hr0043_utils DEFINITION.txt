@@ -36,6 +36,7 @@ CLASS zcl_hr0043_utils DEFINITION
     CONSTANTS mc_employp TYPE char10 VALUE 'EmployeeID' ##NO_TEXT.
     CONSTANTS mc_subtyp TYPE char10 VALUE 'Subty' ##NO_TEXT.
 
+
     CLASS-METHODS generate_limit
       IMPORTING
         !iv_pernr          TYPE persno
@@ -63,6 +64,12 @@ CLASS zcl_hr0043_utils DEFINITION
       EXPORTING
         !ev_ktart         TYPE ktart
         !ev_last_data     TYPE endda .
+    CLASS-METHODS get_plan_current_year
+      IMPORTING
+        !iv_pernr TYPE persno
+        !iv_datum TYPE sy-datum
+      EXPORTING
+        !ev_plan  TYPE zz_plan .
     CLASS-METHODS get_absence_plan
       IMPORTING
         !iv_pernr TYPE persno
@@ -253,7 +260,7 @@ ENDCLASS.
 
 
 
-CLASS ZCL_HR0043_UTILS IMPLEMENTATION.
+CLASS zcl_hr0043_utils IMPLEMENTATION.
 
 
   METHOD set_xss_sign.
@@ -1374,9 +1381,21 @@ CLASS ZCL_HR0043_UTILS IMPLEMENTATION.
 
 
   METHOD  get_p000_2001.
+
+    TYPES: BEGIN OF t_p2001,
+             rem TYPE char1.
+             INCLUDE TYPE p2001.
+    TYPES:  END OF  t_p2001.
+
     DATA: lt_p2001 TYPE STANDARD TABLE OF p2001.
-    DATA: lt_p2001_filter TYPE SORTED TABLE OF p2001 WITH NON-UNIQUE KEY subty begda endda.
-    DATA: lt_p2001_plan TYPE SORTED TABLE OF p2001 WITH NON-UNIQUE KEY  flag4 sprps subty begda endda.
+    DATA: lt_p2001_filter TYPE SORTED TABLE OF t_p2001 WITH NON-UNIQUE KEY subty begda endda.
+    DATA: lt_p2001_plan TYPE SORTED TABLE OF t_p2001 WITH NON-UNIQUE KEY rem sprps subty begda endda.
+    DATA: lv_datum TYPE sy-datum VALUE '99999999'.
+
+    DATA: lt_pdpnr TYPE TABLE OF pdpnr.
+    DATA: lt_pdpsp TYPE  TABLE OF pdpsp.
+    DATA: lt_pdpsp_sort TYPE SORTED TABLE OF pdpsp WITH NON-UNIQUE KEY ftkla.
+    DATA: lt_pdsppsp TYPE TABLE OF pdsppsp.
 
     ev_p000_days  = 0.
 
@@ -1384,29 +1403,55 @@ CLASS ZCL_HR0043_UTILS IMPLEMENTATION.
         iv_pernr  = iv_pernr
     ).
     " data moved to sorted table
-    lt_p2001_filter = lt_p2001.
+    MOVE-CORRESPONDING lt_p2001 TO lt_p2001_filter.
 
     " ---- удаляем Р000 с совпадающими датами с другими отсутствиями (2001)
     lt_p2001_plan = FILTER #( lt_p2001_filter WHERE subty = 'P000' ).
     " выбираем строки с такими же датами как у Р000
     LOOP AT lt_p2001_plan ASSIGNING FIELD-SYMBOL(<fs_p2001_plan>).
+
       "ищем Р000 с дублирующими датами
       DATA(lt_p2001_find) =  FILTER #( lt_p2001_filter WHERE subty NE 'P000'
        AND begda = <fs_p2001_plan>-begda AND endda = <fs_p2001_plan>-endda ).
       IF line_exists( lt_p2001_find[ 1 ] ).
-        <fs_p2001_plan>-flag4 = 'D'. " метим строки, которые войдут в расчет
+        <fs_p2001_plan>-rem = 'X'. " метим строки, которые войдут в расчет
+
       ENDIF.
     ENDLOOP.
 
     " удаляем р000 из осн массива
-    LOOP AT lt_p2001_plan ASSIGNING <fs_p2001_plan> WHERE flag4 = 'D'.
+    LOOP AT lt_p2001_plan ASSIGNING <fs_p2001_plan> WHERE rem = 'X'.
       DELETE lt_p2001_filter WHERE subty =  <fs_p2001_plan>-subty AND begda = <fs_p2001_plan>-begda AND
             endda = <fs_p2001_plan>-endda.
     ENDLOOP.
 
+    "---- новый алгоритм расчета плановых дней
+    lt_pdpnr = VALUE #( ( pernr = iv_pernr error = abap_false ) ).
     LOOP AT lt_p2001_plan ASSIGNING <fs_p2001_plan> WHERE subty = 'P000' AND begda > sy-datum.
   "#EC CI_SORTSEQ невозможно применить операцию EQ из-за условий задачи
-      ev_p000_days = ev_p000_days + <fs_p2001_plan>-abwtg.
+      "ev_p000_days = ev_p000_days + <fs_p2001_plan>-abwtg.
+      CALL FUNCTION 'HR_PERSON_READ_WORK_SCHEDULE'
+        EXPORTING
+          begin_date         = <fs_p2001_plan>-begda
+          end_date           = <fs_p2001_plan>-endda
+        TABLES
+          pernr_tab          = lt_pdpnr
+          psp                = lt_pdpsp
+          day_psp            = lt_pdsppsp
+* CHANGING
+*         CH_AUTH_INFTY_TAB  =
+        EXCEPTIONS
+          error_in_build_psp = 1
+          OTHERS             = 2.
+      IF sy-subrc EQ 0.
+        lt_pdpsp_sort = lt_pdpsp.
+        ev_p000_days = ev_p000_days + REDUCE #( INIT lv_sum TYPE zz_plan
+                                       FOR ls_pdpsp_sort IN
+                                       FILTER #( lt_pdpsp_sort
+                                                 WHERE ftkla EQ '0' )
+                                       NEXT lv_sum = lv_sum + 1 ).
+
+      ENDIF.
     ENDLOOP.
 
 
@@ -1577,6 +1622,62 @@ CLASS ZCL_HR0043_UTILS IMPLEMENTATION.
       ENDIF.
     ENDIF.
     cl_salv_bs_runtime_info=>clear_all( ).
+
+  ENDMETHOD.
+
+
+  METHOD get_plan_current_year.
+    DATA: lt_p2001 TYPE STANDARD TABLE OF p2001.
+    DATA: lt_p2001_filter TYPE SORTED TABLE OF p2001 WITH NON-UNIQUE KEY subty begda.
+    DATA: lt_p2001_plan TYPE SORTED TABLE OF p2001 WITH NON-UNIQUE KEY begda.
+    DATA: lt_pdpnr TYPE TABLE OF pdpnr.
+    DATA: lt_pdpsp TYPE  TABLE OF pdpsp.
+    DATA: lt_pdpsp_sort TYPE SORTED TABLE OF pdpsp WITH NON-UNIQUE KEY datum ftkla.
+    DATA: lt_pdsppsp TYPE TABLE OF pdsppsp.
+
+
+
+    ev_plan  = 0.
+
+
+    lt_p2001 = zcl_pa_it2001=>read_it2001(
+        iv_pernr  = iv_pernr
+    ).
+    " data moved to sorted table
+    lt_p2001_filter = lt_p2001.
+
+    " ---- ищем план c begda >= sy-datum
+    lt_p2001_plan = FILTER #( lt_p2001_filter WHERE subty = 'P000' AND begda >= sy-datum  ).
+
+    lt_pdpnr = VALUE #( ( pernr = iv_pernr error = abap_false ) ).
+
+    LOOP AT lt_p2001_plan ASSIGNING FIELD-SYMBOL(<fs_p2001_plan>) WHERE begda <= iv_datum.
+    "#EC CI_SORTSEQ необходимо учитывать неравенство
+      CALL FUNCTION 'HR_PERSON_READ_WORK_SCHEDULE'
+        EXPORTING
+          begin_date         = <fs_p2001_plan>-begda
+          end_date           = <fs_p2001_plan>-endda
+        TABLES
+          pernr_tab          = lt_pdpnr
+          psp                = lt_pdpsp
+          day_psp            = lt_pdsppsp
+* CHANGING
+*         CH_AUTH_INFTY_TAB  =
+        EXCEPTIONS
+          error_in_build_psp = 1
+          OTHERS             = 2.
+      IF sy-subrc EQ 0.
+        lt_pdpsp_sort = lt_pdpsp.
+        ev_plan = ev_plan + REDUCE #( INIT lv_sum TYPE zz_plan
+                                       FOR ls_pdpsp_sort IN
+                                       FILTER #( lt_pdpsp_sort
+                                                 WHERE ftkla EQ '0' AND datum <= iv_datum )
+                                       NEXT lv_sum = lv_sum + 1 ).
+
+      ENDIF.
+
+    ENDLOOP.
+
 
   ENDMETHOD.
 ENDCLASS.

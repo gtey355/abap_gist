@@ -305,6 +305,9 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
             IMPORTING
               ev_numd = lv_numd
              ) = abap_false.
+            IF 1 = 2.
+              MESSAGE e008(zhr0045).
+            ENDIF.
 
             lt_messages = VALUE #( type = 'E' id = 'ZHR0045' number = '008' message_v1 = lv_numd  ( ) ).
             lo_message_container->add_messages_from_bapi(
@@ -589,6 +592,8 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
     DATA: lt_limit TYPE RANGE OF subty.
     DATA: ls_filter LIKE LINE OF it_filter_select_options.
     DATA: lv_startdate TYPE begda.
+    DATA: lv_plan TYPE zz_plan.
+    DATA: lv_current_year TYPE sy-datum.
 
     TRY.
         super->timeaccountcolle_get_entityset(
@@ -636,28 +641,22 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
            ( sign = 'I' option = 'EQ' low = ls_entityset-time_type )
         ).
 
-*        zcl_hr0043_utils=>external_run(
-*            EXPORTING
-*                iv_pernr = lv_pernr
-*                iv_begda = lv_startdate
-*                it_limit = lt_limit
-*        ).
 
         cl_salv_bs_runtime_info=>set(
                display        = abap_false
                metadata       = abap_false
                data           = abap_true
-           ).
+        ).
 
         CALL FUNCTION 'HR_READ_INFOTYPE_AUTHC_DISABLE'.
 
-        DATA(go_balance) = NEW zcl_hr0135_leave_balance(
+        DATA(lo_balance) = NEW zcl_hr0135_leave_balance(
               iv_date  = lv_startdate
               it_pernr = lt_pernr
               ir_limit = lt_limit
         ).
 
-        DATA(gt_pernr_res) = go_balance->get_leave_balance(
+        DATA(lt_pernr_res) = lo_balance->get_leave_balance(
             iv_future               = abap_false"p_future
         ).
 
@@ -675,25 +674,26 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
           ).
 
           " get avail
-*          zcl_hr0043_utils=>get_avail_from_struct(
-*             EXPORTING
-*               iv_timetype    = <fs_entityset>-time_type
-*               iv_pernr =   <fs_entityset>-pernr
-*               it_struct = lt_pernr_res
-*             IMPORTING
-*               ev_avail = <fs_entityset>-zz_avail
-*          ).
+          IF line_exists( lt_pernr_res[ ktart =  <fs_entityset>-time_type ] ).
+            <fs_entityset>-zz_avail = lt_pernr_res[ ktart =  <fs_entityset>-time_type ]-accumulated.
+          ENDIF.
 
-
-          " get plan
-          zcl_hr0043_utils=>get_absence_plan(
-          EXPORTING
-            iv_pernr = <fs_entityset>-pernr
-          IMPORTING
-            er_plan  = <fs_entityset>-zz_plan
-          ).
 
         ENDLOOP.
+
+*-----  a plan is got once and append to the output structure as a row
+        lv_current_year =  |{ sy-datum(4) }1231|.
+        zcl_hr0043_utils=>get_plan_current_year(
+          EXPORTING
+            iv_pernr = lv_pernr
+            iv_datum = lv_current_year
+           IMPORTING
+            ev_plan = lv_plan
+        ).
+        MESSAGE ID 'ZHR0043_MSG' TYPE 'I' NUMBER 007 INTO DATA(lv_plan_text).
+        APPEND VALUE #( pernr = lv_pernr time_type = 99
+        zz_limn_ltext = lv_plan_text time_unit = '010' zz_avail = lv_plan ) TO et_entityset.
+
 
       CATCH /iwbep/cx_mgw_busi_exception.
       CATCH /iwbep/cx_mgw_tech_exception.
@@ -894,17 +894,17 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
     ).
     IF lv_check_take_hiddenadvance IS INITIAL. " укладываемся в сущ диапазон значений,
       rs_leave_duration-abrtg = lv_e_tage. "lv_avail_days.
-      rs_leave_duration-time_unit_text = 'day'.
+      rs_leave_duration-time_unit_text = 'Дни'.
       lv_avail_estim_days = lv_avail_days.
 
     ELSEIF lv_check_take_hiddenadvance EQ 'G'. "лимита еще нет
       rs_leave_duration-abrtg = lv_e_tage. "lv_avail_days + lv_flag7days. "7 days к остатку
-      rs_leave_duration-time_unit_text = 'day'.
+      rs_leave_duration-time_unit_text = 'Дни'.
       lv_avail_estim_days = lv_avail_days + lv_flag7days.
 
     ELSEIF lv_check_take_hiddenadvance EQ 'A'."лимит есть,  остаток флаг1
       rs_leave_duration-abrtg = lv_e_tage. "lv_rest_adv_days.
-      rs_leave_duration-time_unit_text = 'day'.
+      rs_leave_duration-time_unit_text = 'Дни'.
       lv_avail_estim_days = lv_rest_adv_days.
 
     ELSE. " E ошибка
