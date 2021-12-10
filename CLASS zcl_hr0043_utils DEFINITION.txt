@@ -20,6 +20,7 @@ CLASS zcl_hr0043_utils DEFINITION
     CLASS-DATA mv_excs TYPE awart READ-ONLY VALUE 1000 ##NO_TEXT.
     CLASS-DATA mv_moabw TYPE moabw READ-ONLY VALUE 33 ##NO_TEXT.
     CLASS-DATA mv_mopgk TYPE mopgk READ-ONLY VALUE 'M' ##NO_TEXT.
+
     CLASS-DATA:
       mr_status TYPE RANGE OF cpf_parameter_value .
     CLASS-DATA mv_operation TYPE ptreq_attabsdata-operation READ-ONLY VALUE 'DEL' ##NO_TEXT.
@@ -46,13 +47,7 @@ CLASS zcl_hr0043_utils DEFINITION
         !iv_rest_adv_days  TYPE ptm_quonum OPTIONAL
       RETURNING
         VALUE(rs_controls) TYPE zshr_0043_controls .
-    CLASS-METHODS get_avail_from_struct
-      IMPORTING
-        !it_struct   TYPE ztt_0135_limit_balance
-        !iv_timetype TYPE ptarq_uia_timetype
-        !iv_pernr    TYPE persno
-      EXPORTING
-        !ev_avail    TYPE zz_avail .
+
     CLASS-METHODS set_generation_flag1
       IMPORTING
         !is_leave_request TYPE cl_hcmfab_leave_reques_mpc=>ts_leaverequest
@@ -64,17 +59,6 @@ CLASS zcl_hr0043_utils DEFINITION
       EXPORTING
         !ev_ktart         TYPE ktart
         !ev_last_data     TYPE endda .
-    CLASS-METHODS get_plan_current_year
-      IMPORTING
-        !iv_pernr TYPE persno
-        !iv_datum TYPE sy-datum
-      EXPORTING
-        !ev_plan  TYPE zz_plan .
-    CLASS-METHODS get_absence_plan
-      IMPORTING
-        !iv_pernr TYPE persno
-      EXPORTING
-        !er_plan  TYPE zz_plan .
     CLASS-METHODS get_abs_long_text
       IMPORTING
         !iv_absence TYPE awart
@@ -85,31 +69,7 @@ CLASS zcl_hr0043_utils DEFINITION
         !iv_subty TYPE awart
       EXPORTING
         !ev_text  TYPE zz_absn .
-*---
-    CLASS-METHODS check_condition_for_1check
-      IMPORTING
-        !is_leave_request TYPE cl_hcmfab_leave_reques_mpc=>ts_leaverequest
-      EXPORTING
-        !ev_diff2006      TYPE ptm_quonum
-        !ev_etag          TYPE ptm_quonum
-        !ev_plan          TYPE ptm_quonum
-      RETURNING
-        VALUE(rv_bool)    TYPE boolean_01 .
-    CLASS-METHODS check_second_advancepay
-      IMPORTING
-        !is_leave_request TYPE cl_hcmfab_leave_reques_mpc=>ts_leaverequest
-      RETURNING
-        VALUE(rv_bool)    TYPE boolean_01 .
-    CLASS-METHODS get_abs_req
-      IMPORTING
-        !is_leave_request TYPE cl_hcmfab_leave_reques_mpc=>ts_leaverequest
-      EXPORTING
-        VALUE(ev_abs_req) TYPE abwtg .
-    CLASS-METHODS get_abwko_for_requested_subty
-      IMPORTING
-        !is_leave_request TYPE cl_hcmfab_leave_reques_mpc=>ts_leaverequest
-      EXPORTING
-        !et_abwko         TYPE tt_abwko .
+
     CLASS-METHODS check_crossplan
       IMPORTING
         !iv_pernr       TYPE persno
@@ -194,12 +154,7 @@ CLASS zcl_hr0043_utils DEFINITION
         !iv_pernr TYPE persno
       EXPORTING
         !ev_sud   TYPE chang .
-    CLASS-METHODS remove_future_absence
-      IMPORTING
-        !iv_pernr  TYPE persno
-        !iv_subty  TYPE subty
-      EXPORTING
-        !ev_amount TYPE abrtg .
+
     CLASS-METHODS check_take_hidden_advance
       IMPORTING
         !iv_pernr         TYPE persno
@@ -218,26 +173,20 @@ CLASS zcl_hr0043_utils DEFINITION
         !ev_sum_flag1    TYPE ptm_quonum
       RETURNING
         VALUE(rv_result) TYPE char1 .
-    CLASS-METHODS get_avail_days
-      IMPORTING
-        !iv_pernr      TYPE persno
-      EXPORTING
-        !ev_avail_days TYPE ptm_quonum .
-    CLASS-METHODS get_used_days
-      IMPORTING
-        !iv_pernr     TYPE persno
-      EXPORTING
-        !ev_used_days TYPE ptm_quonum .
+
+
     CLASS-METHODS get_diff_2006
       IMPORTING
         !iv_pernr         TYPE persno
+        !iv_ktart         TYPE ktart OPTIONAL
       EXPORTING
         !ev_diff2006_days TYPE ptm_quonum .
     CLASS-METHODS get_p000_2001
       IMPORTING
-        !iv_pernr     TYPE persno
+        !iv_pernr       TYPE persno
+        !iv_currentyear TYPE boole_d OPTIONAL
       EXPORTING
-        !ev_p000_days TYPE ptm_quonum .
+        !ev_p000_days   TYPE ptm_quonum .
     CLASS-METHODS read_param
       IMPORTING
         !iv_name  TYPE /iwbep/s_mgw_name_value_pair-name
@@ -249,13 +198,65 @@ CLASS zcl_hr0043_utils DEFINITION
         !iv_abscode TYPE subty
       EXPORTING
         !ev_ktart   TYPE ktart .
-    CLASS-METHODS external_run
+
+    CLASS-METHODS set_memory_for_sumulate_lrq
       IMPORTING
-        !iv_pernr TYPE persno
-        !iv_begda TYPE begda
-        !it_limit TYPE tt_limit.
+        !iv_simulate TYPE boole_d.
+    CLASS-METHODS get_memory_for_sumulate_lrq
+      RETURNING
+        VALUE(rv_simulate) TYPE boole_d.
+
+    CLASS-METHODS set_memory_for_check
+      IMPORTING
+        !iv_simulate TYPE boole_d.
+    CLASS-METHODS get_memory_for_check
+      RETURNING
+        VALUE(rv_simulate) TYPE boole_d.
+    CLASS-METHODS set_lrq_deletable
+      IMPORTING
+        !iv_requestid  TYPE tim_req_id
+        !it_req_detail TYPE hcmfab_t_lrq_request_detail
+      EXPORTING
+        !ev_deletable  TYPE boole_d.
+    CLASS-METHODS set_lrq_editable
+      IMPORTING
+        !iv_requestid  TYPE tim_req_id
+        !it_req_detail TYPE hcmfab_t_lrq_request_detail
+      CHANGING
+        !cv_editable   TYPE boole_d.
+    CLASS-METHODS get_curr_balance
+      IMPORTING
+        !iv_pernr      TYPE persno
+        !iv_subty      TYPE awart OPTIONAL
+        !iv_begda      TYPE datum OPTIONAL
+        !iv_endda      TYPE datum OPTIONAL
+      EXPORTING
+        !ev_quota_days TYPE ptm_quonum.
+    CLASS-METHODS get_reserved_req
+      IMPORTING
+        !iv_pernr         TYPE persno
+        !iv_subty         TYPE awart OPTIONAL
+      EXPORTING
+        !ev_reserved_days TYPE ptm_quonum.
+    CLASS-METHODS get_wf_dates
+      IMPORTING
+        iv_wiid  TYPE sww_wiid
+      EXPORTING
+        ev_begda TYPE datum
+        ev_endda TYPE datum.
+    CLASS-METHODS get_days_from_dates
+      IMPORTING
+        iv_pernr       TYPE persno
+        iv_begda       TYPE datum
+        iv_endda       TYPE datum
+      EXPORTING
+        VALUE(ev_days) TYPE ptm_quonum.
+
   PROTECTED SECTION.
   PRIVATE SECTION.
+
+
+
 ENDCLASS.
 
 
@@ -567,7 +568,7 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
       " age <= lv_control_age и инвалидности нет - раз в 3 года
       IF  lv_age <= lv_control_age AND lv_inv EQ abap_false.
         " get diff
-        lv_diff = sy-datum - lt_pa2001[ 1 ]-begda.
+        lv_diff = iv_begda - lt_pa2001[ 1 ]-begda.
         IF lv_diff < 0.
           lv_diff = lv_diff * -1.
         ENDIF.
@@ -626,21 +627,12 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
 
 
   METHOD get_ce_v2.
-    DATA: lt_p0031 TYPE STANDARD TABLE OF p0031.
+
     DATA: lt_p0001 TYPE STANDARD TABLE OF p0001.
 
     ev_ce = abap_false. " есть или нет совеститель
     ev_gence = abap_false. " остновной или совм
 
-    CALL FUNCTION 'HR_READ_INFOTYPE'
-      EXPORTING
-        infty     = '0031'
-        pernr     = iv_pernr
-      TABLES
-        infty_tab = lt_p0031.
-    IF sy-subrc NE 0.
-      RETURN.
-    ENDIF.
     CALL FUNCTION 'HR_READ_INFOTYPE'
       EXPORTING
         infty     = '0001'
@@ -651,7 +643,21 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    IF line_exists( lt_p0031[ 1 ] ).
+    " ---- get CE w/o 0031 it
+    SELECT SINGLE sobid
+         INTO @DATA(lv_sobid)
+         FROM hrp1001
+        WHERE objid = @iv_pernr
+          AND otype = 'P'
+          AND sclas = 'CP'           "#EC CI_NOORDER запись всегда одна
+.
+    SELECT sobid
+      INTO TABLE @DATA(lt_sobid)
+      FROM hrp1001
+     WHERE objid = @lv_sobid
+       AND otype = 'CP'
+       AND sclas = 'P'.
+    IF line_exists( lt_sobid[ 2 ] ).
       ev_ce = abap_true.
     ENDIF.
 
@@ -681,133 +687,6 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
   ENDMETHOD.               "#EC CI_VALPAR  перенос комплексных значений
 
 
-  METHOD get_avail_from_struct.
-
-    DATA: ls_struct LIKE LINE OF it_struct. "zshr_0135_limit_balance.
-
-    ev_avail = 0.
-
-    READ TABLE it_struct INTO ls_struct
-    WITH KEY pernr = iv_pernr. "#EC CI_CONV_OK для анализа необходимы все поля структуры
-    IF sy-subrc EQ 0.
-      CASE iv_timetype.
-        WHEN '01'.
-          ev_avail = ls_struct-early_basic_acc.
-        WHEN '02'.
-          ev_avail = ls_struct-rks_mks_acc.
-        WHEN '03'.
-          ev_avail = ls_struct-vut_acc.
-        WHEN '04'.
-          ev_avail = ls_struct-nrd_acc.
-        WHEN '05'.
-          ev_avail = ls_struct-early_basic_wd_acc.
-        WHEN '07'.
-          ev_avail = ls_struct-chaes_acc.
-      ENDCASE.
-    ENDIF.
-  ENDMETHOD.
-
-
-  METHOD get_abwko_for_requested_subty.
-
-    DATA(lv_sep) = 2.
-    DATA(lv_count) = 0.
-    DATA(lv_moabw) = zcl_hr0043_utils=>mv_moabw.
-    DATA(lv_mopgk) = zcl_hr0043_utils=>mv_mopgk.
-
-
-    SELECT
-    t~moabw AS tmoabw,
-    t~subty AS tsubty,
-    t~crule AS tcrule,
-    r~mopgk AS vmopgk,
-    r~mozko AS vmozko,
-    r~dedrg AS vdedrg,
-    r~qttps AS rqttps
-    FROM
-    t554s AS t JOIN t556r AS r ON r~dedrg = t~crule
-    WHERE  t~moabw = @lv_moabw
-           AND t~subty = @is_leave_request-absence_type
-           AND r~mopgk = @lv_mopgk
-           AND r~mozko = @lv_moabw
-    INTO TABLE @DATA(lt_res_abwko). "#EC CI_BUFFJOIN для повышения производительности выборки
-
-    IF line_exists( lt_res_abwko[ 1 ] ).
-
-      DATA(lv_rqttps) = lt_res_abwko[ 1 ]-rqttps.
-      DATA(lv_strlen) = strlen( lv_rqttps ).
-
-      WHILE lv_strlen - lv_count GT lv_sep.
-        APPEND VALUE #( sign = 'I' option = 'EQ' low = lv_rqttps+lv_count(lv_sep) ) TO et_abwko.
-        lv_count = lv_count + lv_sep.
-      ENDWHILE.
-
-      APPEND VALUE #( sign = 'I' option = 'EQ' low = lv_rqttps+lv_count ) TO et_abwko.
-    ENDIF.
-
-  ENDMETHOD.
-
-
-  METHOD get_abs_req.
-
-
-    TYPES: BEGIN OF t_selopt,
-             sign   TYPE selopt-sign,
-             option TYPE selopt-option,
-             low    TYPE ptreq_header-request_id,
-             high   TYPE ptreq_header-request_id,
-           END OF t_selopt.
-
-    DATA: lv_item_raw TYPE os_guid.
-    DATA: lt_bad_req TYPE TABLE OF t_selopt.
-    DATA(lt_status) = zcl_hr0043_param=>mr_status.
-    DATA(lv_operation) = zcl_hr0043_utils=>mv_operation.
-
-
-    ev_abs_req = 0.
-
-    " определяем, есть ли заявки
-    SELECT  FROM ptreq_attabsdata
-    FIELDS item_id  ", operation, abwtg, hextobin( item_id ) AS  item_id16
-    WHERE pernr = @is_leave_request-employee_number AND
-    subty =  @is_leave_request-absence_type
-    INTO TABLE @DATA(lt_ptreq_attabsdata).
-
-    IF NOT line_exists( lt_ptreq_attabsdata[ 1 ] ).
-      RETURN.
-    ENDIF.
-
-
-    SELECT a~item_id, a~operation, a~abwtg, hextobin( a~item_id ) AS  item_id16,
-           i~item_list_id AS item_item_list_id, i~item_ins AS item_item_ins,
-           h~request_id, h~item_list_id AS req_item_list_id, h~status
-           FROM
-             ptreq_attabsdata AS a JOIN ptreq_items AS i ON i~item_ins = hextobin( a~item_id )
-           JOIN
-             ptreq_header AS h ON h~item_list_id = i~item_list_id
-           WHERE
-             a~pernr = @is_leave_request-employee_number AND
-             a~subty =  @is_leave_request-absence_type
-           ORDER BY h~request_id
-           INTO TABLE @DATA(lt_ptreq_header).
-
-    " определяем номера реквестов с запрещенными статусами или с operation
-    LOOP AT lt_ptreq_header ASSIGNING FIELD-SYMBOL(<fs_ptreq_header>)
-      WHERE status IN lt_status OR
-      operation = lv_operation. "#EC CI_STDSEQ 1) определена инлайн и малое количество строк
-      APPEND VALUE #( low = <fs_ptreq_header>-request_id sign = 'I' option = 'EQ' ) TO lt_bad_req.
-    ENDLOOP.
-
-    " удаляем эти строки
-    DELETE lt_ptreq_header WHERE request_id IN lt_bad_req.
-    " оставшиеся складываем
-    LOOP AT lt_ptreq_header  ASSIGNING <fs_ptreq_header>.
-      ev_abs_req += <fs_ptreq_header>-abwtg.
-    ENDLOOP.
-
-  ENDMETHOD.
-
-
   METHOD get_abs_long_text.
 
     DATA(lv_inft) = zcl_hr0043_utils=>mv_inft.
@@ -823,80 +702,8 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD get_absence_plan.
-
-    TYPES: BEGIN OF t_p2001,
-             calc TYPE c LENGTH 1.
-             INCLUDE TYPE  p2001.
-    TYPES: END OF t_p2001.
-    "DATA: lt_pa2001 TYPE TABLE OF t_pa2001.
-    DATA: lv_year TYPE n LENGTH 4.
-    DATA: lv_pastyear TYPE n LENGTH 4.
-    DATA: lv_nextyear TYPE n LENGTH 4.
-
-    DATA: lt_p2001 TYPE STANDARD TABLE OF p2001.
-    DATA: lt_p2001_filter TYPE SORTED TABLE OF p2001 WITH NON-UNIQUE KEY subty begda endda.
-    DATA: lt_p2001_plan TYPE SORTED TABLE OF p2001 WITH NON-UNIQUE KEY subty begda endda.
-
-
-    DATA(lv_sub) = zcl_hr0043_utils=>mv_sub.
-    lv_year = sy-datum(4).
-    TRY.
-        lv_pastyear = EXACT #( lv_year  - 1 ).
-        lv_nextyear = EXACT #( lv_year + 1 ).
-      CATCH cx_sy_conversion_error.
-    ENDTRY.
-    DATA(lv_lastday) = |{ lv_year }1231|.
-
-
-    er_plan = 0.
-
-*    SELECT * FROM pa2001
-*    WHERE pernr = @iv_pernr AND subty = @lv_sub AND sprps = 'X'
-*    INTO CORRESPONDING FIELDS OF TABLE @lt_pa2001.
-
-
-    lt_p2001 = zcl_pa_it2001=>read_it2001(
-            iv_pernr  = iv_pernr
-        ).
-    lt_p2001_filter = lt_p2001.
-
-    IF line_exists( lt_p2001[ 1 ] ).
-      " отмечаем строки для суммирования
-      LOOP AT lt_p2001 ASSIGNING FIELD-SYMBOL(<fs_p2001>).
-        " с сегодня по 31-12-ХХ
-        IF  <fs_p2001>-begda >= sy-datum AND <fs_p2001>-begda <= lv_lastday.
-          <fs_p2001>-flag2 = abap_true.
-        ENDIF.
-        "  начинается в тек году а заканчивается в след
-        IF  <fs_p2001>-begda(4) = lv_year AND <fs_p2001>-endda(4) = lv_nextyear.
-          <fs_p2001>-flag2 = abap_true.
-        ENDIF.
-        "  begda <= sy-datum <= endda &&
-        IF  <fs_p2001>-begda <= sy-datum  AND <fs_p2001>-endda >= sy-datum AND
-          <fs_p2001>-begda(4) = lv_pastyear.
-          <fs_p2001>-flag2 = abap_false.
-        ENDIF.
-      ENDLOOP.
-
-      " получаем тотал в календ днях
-      LOOP AT lt_p2001  ASSIGNING <fs_p2001>.
-        IF  <fs_p2001>-flag2 EQ abap_true.
-          er_plan = er_plan +  <fs_p2001>-kaltg.
-        ENDIF.
-      ENDLOOP.
-    ENDIF.
-
-  ENDMETHOD.
-
-
   METHOD generate_limit.
     DATA: ls_ui_leave_request  TYPE cl_hcmfab_leave_reques_mpc=>ts_leaverequest.
-    DATA: lv_diff2006 TYPE ptm_quonum.
-    DATA: lv_etag TYPE ptm_quonum.
-    DATA: lv_plan TYPE ptm_quonum.
-    DATA: lv_check_cond TYPE boolean_01.
-
     rs_controls-zz_genlimit = abap_false.
     ls_ui_leave_request-employee_number = iv_pernr.
     ls_ui_leave_request-begda = iv_begda.
@@ -943,55 +750,6 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
   ENDMETHOD.          "#EC CI_VALPAR унифицированная выходная структура
 
 
-  METHOD check_second_advancepay.
-
-    DATA: lv_e_tage TYPE ptm_quonum.
-    DATA: lt_abwko TYPE TABLE OF selopt.
-
-    rv_bool = abap_false.
-
-    " get calendar day of amount of absence
-    CALL FUNCTION 'DAYS_BETWEEN_TWO_DATES'
-      EXPORTING
-        i_datum_bis             = is_leave_request-endda
-        i_datum_von             = is_leave_request-begda
-*       I_KZ_EXCL_VON           = '0'
-        i_kz_incl_bis           = '1'
-*       I_KZ_ULT_BIS            = ' '
-*       I_KZ_ULT_VON            = ' '
-*       I_STGMETH               = '0'
-*       I_SZBMETH               = '1'
-      IMPORTING
-        e_tage                  = lv_e_tage
-      EXCEPTIONS
-        days_method_not_defined = 1
-        OTHERS                  = 2.
-    IF sy-subrc <> 0.
-      RETURN.
-    ENDIF.
-    IF  lv_e_tage < 0.
-      lv_e_tage = lv_e_tage * -1.
-    ENDIF.
-
-    zcl_hr0043_utils=>get_abwko_for_requested_subty(
-     EXPORTING is_leave_request = is_leave_request
-     IMPORTING et_abwko = lt_abwko
-   ).
-
-    SELECT * FROM pa2006
-      WHERE pernr = @is_leave_request-employee_number AND ktart IN @lt_abwko
-       AND begda >= @sy-datum
-      INTO TABLE @DATA(lt_pa2006).
-
-    IF line_exists( lt_pa2006[ 1 ] ).
-      IF lv_e_tage <= lt_pa2006[ 1 ]-flag1.
-        rv_bool = abap_true.
-      ENDIF.
-    ENDIF.
-
-  ENDMETHOD.
-
-
   METHOD check_disp.
     rv_bool = abap_false.
     DATA(lv_attr) = zcl_hr0043_utils=>mv_sub2006.
@@ -1016,103 +774,6 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
     IF line_exists( lt_pa2001[ 1 ] ).
       rv_check = abap_true.
     ENDIF.
-
-  ENDMETHOD.
-
-
-  METHOD check_condition_for_1check.
-
-    DATA: lv_e_tage TYPE ptm_quonum.
-    DATA: lv_zz_plan TYPE  zz_plan.
-    DATA: lv_diff2006 TYPE ptm_quoded VALUE 0.
-    DATA: lt_pa2006 TYPE TABLE OF zshr_0043_pa2006 WITH EMPTY KEY.
-    DATA: lt_abwko TYPE TABLE OF selopt.
-    DATA: lv_abs_req TYPE abwtg.
-    DATA(lv_flag) = zcl_hr0130_param=>mv_flag.
-
-
-    rv_bool = abap_false.
-    ev_diff2006 = 0.
-    ev_etag = 0.
-    ev_plan = 0.
-
-
-    " get calendar day of amount of absence
-    CALL FUNCTION 'DAYS_BETWEEN_TWO_DATES'
-      EXPORTING
-        i_datum_bis             = is_leave_request-endda
-        i_datum_von             = is_leave_request-begda
-*       I_KZ_EXCL_VON           = '0'
-        i_kz_incl_bis           = '1'
-*       I_KZ_ULT_BIS            = ' '
-*       I_KZ_ULT_VON            = ' '
-*       I_STGMETH               = '0'
-*       I_SZBMETH               = '1'
-      IMPORTING
-        e_tage                  = lv_e_tage
-      EXCEPTIONS
-        days_method_not_defined = 1
-        OTHERS                  = 2.
-    IF sy-subrc <> 0.
-      RETURN.
-    ENDIF.
-    IF  lv_e_tage < 0.
-      lv_e_tage = lv_e_tage * -1.
-    ENDIF.
-
-    " --- основной алгоритм анализа лимитов
-
-    " Необходимо проанализировать, какой вид отсутствия запрошен
-    " в заявке и какой тип лимита отсутствия ему соответствует
-    zcl_hr0043_utils=>get_abwko_for_requested_subty(
-      EXPORTING is_leave_request = is_leave_request
-      IMPORTING et_abwko = lt_abwko
-    ).
-
-    " получаем ABS_REQ
-    zcl_hr0043_utils=>get_abs_req(
-      EXPORTING is_leave_request = is_leave_request
-      IMPORTING ev_abs_req = lv_abs_req
-    ).
-
-    " расчитываем план zz_plan
-    lv_zz_plan = 0.
-    zcl_hr0043_utils=>get_absence_plan(
-           EXPORTING
-             iv_pernr = is_leave_request-employee_number
-           IMPORTING
-             er_plan  = lv_zz_plan
-    ).
-
-    " получаем разницу diff
-    SELECT anzhl, kverb, flag1, ( anzhl - kverb ) AS diff, begda, endda, ktart FROM pa2006
-      WHERE pernr = @is_leave_request-employee_number AND ktart IN @lt_abwko
-       AND (  begda LE @sy-datum AND  endda GE @sy-datum )
-      INTO CORRESPONDING FIELDS OF TABLE @lt_pa2006.
-
-    IF NOT line_exists( lt_pa2006[ 1 ] ).
-      RETURN.
-    ENDIF.
-
-    lv_diff2006 = lt_pa2006[ 1 ]-diff.
-    DATA(lv_res) = lv_diff2006 + lv_flag - lv_zz_plan - lv_abs_req.
-              "#EC CI_CONV_OK тип lv_flag определен в другом пакете 130
-    IF lv_res < 0.
-      lv_res = lv_res * -1.
-    ENDIF.
-
-    IF lv_res GE lv_e_tage.
-      " запуск программы
-      rv_bool = abap_true.
-    ELSE.
-      " выводить ошибку
-      rv_bool = abap_false.
-    ENDIF.
-
-
-    ev_diff2006 = lv_diff2006.
-    ev_etag = lv_e_tage.
-    ev_plan = lv_zz_plan.
 
   ENDMETHOD.
 
@@ -1158,27 +819,6 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
                       iv_add_to_response_header = abap_true
                       iv_entity_type           = iv_entity_name
       ).
-    ENDLOOP.
-  ENDMETHOD.
-
-
-  METHOD remove_future_absence.
-    DATA: lt_p2001 TYPE STANDARD TABLE OF p2001.
-    ev_amount = 0.
-
-    CALL FUNCTION 'HR_READ_INFOTYPE'
-      EXPORTING
-        infty     = '2001'
-        pernr     = iv_pernr
-      TABLES
-        infty_tab = lt_p2001.
-    IF sy-subrc NE 0.
-      RETURN.
-    ENDIF.
-    LOOP AT lt_p2001 INTO DATA(ls_p2001)
-        WHERE pernr = iv_pernr AND subty = iv_subty AND sprps = 'X' AND begda > sy-datum.
-      "MOVE-CORRESPONDING ls_p2001 TO ls_p2001_1.
-      ev_amount = ev_amount  + ls_p2001-kaltg.
     ENDLOOP.
   ENDMETHOD.
 
@@ -1238,6 +878,7 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
       " сумма diff из 2006
       zcl_hr0043_utils=>get_diff_2006(
           EXPORTING iv_pernr = iv_pernr
+                     iv_ktart = '01'
           IMPORTING ev_diff2006_days  = lv_diff2006
       ).
       "  сумма Р000 из 2001
@@ -1300,31 +941,10 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD get_avail_days.
-    DATA: lt_p2006 TYPE STANDARD TABLE OF p2006.
-    DATA: lt_p2006_filter TYPE SORTED TABLE OF p2006 WITH NON-UNIQUE KEY begda endda ktart.
-    DATA: lt_p2006_plan TYPE SORTED TABLE OF p2006 WITH NON-UNIQUE KEY begda endda ktart.
-
-    ev_avail_days = 0.
-
-    lt_p2006 = zcl_pa_it2006=>read_it2006(
-            iv_pernr  = iv_pernr
-   ).
-    lt_p2006_filter = lt_p2006.
-
-    "-------  из 2006 получаем доступные дни
-    LOOP AT lt_p2006_filter ASSIGNING FIELD-SYMBOL(<fs_p2006_filter>).
-      IF   <fs_p2006_filter>-anzhl <>  <fs_p2006_filter>-kverb.
-        ev_avail_days = ev_avail_days + <fs_p2006_filter>-anzhl. "
-      ENDIF.
-    ENDLOOP.
-  ENDMETHOD.
-
-
   METHOD get_diff_2006.
     DATA: lt_p2006 TYPE STANDARD TABLE OF p2006.
-    DATA: lt_p2006_filter TYPE SORTED TABLE OF p2006 WITH NON-UNIQUE KEY begda endda ktart.
-    DATA: lt_p2006_plan TYPE SORTED TABLE OF p2006 WITH NON-UNIQUE KEY begda endda ktart.
+    DATA: lt_p2006_filter TYPE STANDARD TABLE OF p2006 WITH NON-UNIQUE KEY ktart.
+    DATA: lt_ktart TYPE RANGE OF ktart.
 
     ev_diff2006_days = 0.
 
@@ -1333,50 +953,20 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
    ).
     lt_p2006_filter = lt_p2006.
 
+    " определяем ktart
+    IF iv_ktart EQ '01'.
+      lt_ktart = zcl_hr0043_param=>mr_ktart.
+    ELSE.
+      APPEND VALUE #( sign = 'I' option = 'EQ' low = iv_ktart ) TO lt_ktart.
+    ENDIF.
+
     "-------  из 2006 получаем diff дни
-    LOOP AT lt_p2006_filter ASSIGNING FIELD-SYMBOL(<fs_p2006_filter>).
+    LOOP AT lt_p2006_filter ASSIGNING FIELD-SYMBOL(<fs_p2006_filter>)
+        WHERE ktart IN lt_ktart.
       IF   <fs_p2006_filter>-anzhl <>  <fs_p2006_filter>-kverb.
         ev_diff2006_days = ev_diff2006_days + <fs_p2006_filter>-anzhl - <fs_p2006_filter>-kverb.
       ENDIF.
     ENDLOOP.
-  ENDMETHOD.
-
-
-  METHOD get_used_days.
-    DATA: lt_p2001 TYPE STANDARD TABLE OF p2001.
-    DATA: lt_p2001_filter TYPE SORTED TABLE OF p2001 WITH NON-UNIQUE KEY  subty begda endda.
-    DATA: lt_p2001_plan TYPE SORTED TABLE OF p2001 WITH NON-UNIQUE KEY sprps. "subty begda endda .
-
-    lt_p2001 = zcl_pa_it2001=>read_it2001(
-        iv_pernr  = iv_pernr
-    ).
-    " data moved to sorted table
-    lt_p2001_filter = lt_p2001.
-
-    " ---- вычитаем Р000 с совпадающими датами с другими отсутствиями (2001)
-    lt_p2001_plan = FILTER #( lt_p2001_filter WHERE subty = 'P000' ).
-    " выбираем строки с такими же датами как у Р000
-    LOOP AT lt_p2001_plan ASSIGNING FIELD-SYMBOL(<fs_p2001_plan>).
-      DATA(lt_p2001_find) =  FILTER #( lt_p2001_filter WHERE subty NE 'P000'
-       AND begda = <fs_p2001_plan>-begda AND endda = <fs_p2001_plan>-endda ).
-      IF line_exists( lt_p2001_find[ 1 ] ).
-        <fs_p2001_plan>-sprps = 'D'. " метим строки, которые потом удалим из основного массива
-      ENDIF.
-    ENDLOOP.
-    " удаляем р000 из осн массива
-    LOOP AT lt_p2001_plan ASSIGNING <fs_p2001_plan> WHERE sprps = 'D'.
-      DELETE lt_p2001_filter WHERE subty =  <fs_p2001_plan>-subty AND begda = <fs_p2001_plan>-begda AND
-            endda = <fs_p2001_plan>-endda.
-    ENDLOOP.
-
-    "---- вычитаем Р000 будущих периодов (2001)
-    DELETE lt_p2001_filter WHERE subty = 'P000' AND begda > sy-datum.
-
-    "---- получаем кол-во взятых дней
-    LOOP AT lt_p2001_filter ASSIGNING FIELD-SYMBOL(<fs_p2001_filter>).
-      ev_used_days = ev_used_days + <fs_p2001_filter>-abwtg. " не календ д
-    ENDLOOP.
-
   ENDMETHOD.
 
 
@@ -1389,13 +979,11 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
 
     DATA: lt_p2001 TYPE STANDARD TABLE OF p2001.
     DATA: lt_p2001_filter TYPE SORTED TABLE OF t_p2001 WITH NON-UNIQUE KEY subty begda endda.
-    DATA: lt_p2001_plan TYPE SORTED TABLE OF t_p2001 WITH NON-UNIQUE KEY rem sprps subty begda endda.
-    DATA: lv_datum TYPE sy-datum VALUE '99999999'.
-
+    DATA: lt_p2001_plan TYPE TABLE OF t_p2001 WITH NON-UNIQUE KEY pernr.
     DATA: lt_pdpnr TYPE TABLE OF pdpnr.
-    DATA: lt_pdpsp TYPE  TABLE OF pdpsp.
-    DATA: lt_pdpsp_sort TYPE SORTED TABLE OF pdpsp WITH NON-UNIQUE KEY ftkla.
-    DATA: lt_pdsppsp TYPE TABLE OF pdsppsp.
+    DATA: lv_where_plan TYPE string.
+    DATA: lv_curr_year TYPE n LENGTH 4.
+    DATA: lv_next_year TYPE n LENGTH 4.
 
     ev_p000_days  = 0.
 
@@ -1409,49 +997,37 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
     lt_p2001_plan = FILTER #( lt_p2001_filter WHERE subty = 'P000' ).
     " выбираем строки с такими же датами как у Р000
     LOOP AT lt_p2001_plan ASSIGNING FIELD-SYMBOL(<fs_p2001_plan>).
-
       "ищем Р000 с дублирующими датами
       DATA(lt_p2001_find) =  FILTER #( lt_p2001_filter WHERE subty NE 'P000'
        AND begda = <fs_p2001_plan>-begda AND endda = <fs_p2001_plan>-endda ).
       IF line_exists( lt_p2001_find[ 1 ] ).
-        <fs_p2001_plan>-rem = 'X'. " метим строки, которые войдут в расчет
-
+        <fs_p2001_plan>-rem = 'X'. "
       ENDIF.
     ENDLOOP.
 
-    " удаляем р000 из осн массива
-    LOOP AT lt_p2001_plan ASSIGNING <fs_p2001_plan> WHERE rem = 'X'.
-      DELETE lt_p2001_filter WHERE subty =  <fs_p2001_plan>-subty AND begda = <fs_p2001_plan>-begda AND
-            endda = <fs_p2001_plan>-endda.
-    ENDLOOP.
+    DELETE lt_p2001_plan WHERE rem = 'X'.
 
-    "---- новый алгоритм расчета плановых дней
+    "----- новый алгоритм расчета плановых дней
     lt_pdpnr = VALUE #( ( pernr = iv_pernr error = abap_false ) ).
-    LOOP AT lt_p2001_plan ASSIGNING <fs_p2001_plan> WHERE subty = 'P000' AND begda > sy-datum.
-  "#EC CI_SORTSEQ невозможно применить операцию EQ из-за условий задачи
-      "ev_p000_days = ev_p000_days + <fs_p2001_plan>-abwtg.
-      CALL FUNCTION 'HR_PERSON_READ_WORK_SCHEDULE'
-        EXPORTING
-          begin_date         = <fs_p2001_plan>-begda
-          end_date           = <fs_p2001_plan>-endda
-        TABLES
-          pernr_tab          = lt_pdpnr
-          psp                = lt_pdpsp
-          day_psp            = lt_pdsppsp
-* CHANGING
-*         CH_AUTH_INFTY_TAB  =
-        EXCEPTIONS
-          error_in_build_psp = 1
-          OTHERS             = 2.
-      IF sy-subrc EQ 0.
-        lt_pdpsp_sort = lt_pdpsp.
-        ev_p000_days = ev_p000_days + REDUCE #( INIT lv_sum TYPE zz_plan
-                                       FOR ls_pdpsp_sort IN
-                                       FILTER #( lt_pdpsp_sort
-                                                 WHERE ftkla EQ '0' )
-                                       NEXT lv_sum = lv_sum + 1 ).
 
-      ENDIF.
+    " --- в зависимости от параметра делаем выборку плана
+    IF iv_currentyear EQ abap_false.
+      lv_where_plan = | begda >= sy-datum|.
+    ELSE.
+      lv_curr_year = sy-datum+0(4).
+      lv_next_year = lv_curr_year + 1.
+      lv_where_plan = | begda >= sy-datum and begda+0(4) = { lv_curr_year } and | &&
+      | ( endda+0(4) = { lv_curr_year } or endda+0(4) = { lv_next_year } )|.
+    ENDIF.
+
+    LOOP AT lt_p2001_plan ASSIGNING <fs_p2001_plan> WHERE (lv_where_plan).
+
+      " получаем дни из дат
+      zcl_hr0043_utils=>get_days_from_dates(
+          EXPORTING iv_pernr = iv_pernr
+          iv_begda = <fs_p2001_plan>-begda
+          iv_endda = <fs_p2001_plan>-endda
+          IMPORTING ev_days =  ev_p000_days ).
     ENDLOOP.
 
 
@@ -1479,205 +1055,281 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD external_run.
+  METHOD set_memory_for_sumulate_lrq.
 
-    DATA: lv_jobnumber         TYPE tbtcjob-jobcount VALUE 99,
-          lv_jobname           TYPE tbtcjob-jobname VALUE 'START135',
-          ls_print_params      TYPE pri_params,
-          ls_global_job        TYPE tbtcjob,
-          ls_global_start_date TYPE tbtcstrt,
-          lt_global_step_tbl   TYPE TABLE OF tbtcstep,
-          ls_step              TYPE bpjobstep,
-          lv_valid             TYPE c,
-          lv_user              TYPE sy-uname VALUE 'SAP_WFRT'.
-
-
-    cl_salv_bs_runtime_info=>set(
-        display        = abap_false
-        metadata       = abap_false
-        data           = abap_true
-    ).
-
-    CALL FUNCTION 'GET_PRINT_PARAMETERS'
-      EXPORTING
-        immediately    = abap_true
-        no_dialog      = abap_true
-        report         = 'zhr0043_start_135_job'
-      IMPORTING
-        out_parameters = ls_print_params
-        valid          = lv_valid.
-
-*    ls_global_job-jobname   = lv_jobname.
-*    ls_global_job-newflag   = 'O'.
-*
-*    APPEND VALUE #( program = 'RSBTCPT3' typ = 'A' status ='P' authcknam = lv_user )
-*        TO lt_global_step_tbl.
-*    CALL FUNCTION 'BP_JOB_CREATE'
-*      EXPORTING
-*        job_cr_dialog    = 'N'
-*        job_cr_head_inp  = ls_global_job
-*      IMPORTING
-*        job_cr_head_out  = ls_global_job
-*        job_cr_stdt_out  = ls_global_start_date
-*      TABLES
-*        job_cr_steplist  = lt_global_step_tbl
-*      EXCEPTIONS
-*        invalid_job_data = 1
-*        OTHERS           = 4.
-
-    CALL FUNCTION 'JOB_OPEN'
-      EXPORTING
-        jobname          = lv_jobname
-      IMPORTING
-        jobcount         = lv_jobnumber
-      EXCEPTIONS
-        cant_create_job  = 1
-        invalid_job_data = 2
-        jobname_missing  = 3
-        OTHERS           = 4.
-    IF sy-subrc = 0.
-
-      SUBMIT zhr0043_start_135_job
-        WITH p_pernr EQ iv_pernr
-        WITH p_begda EQ iv_begda
-        WITH s_limit IN it_limit
-        TO SAP-SPOOL
-        SPOOL PARAMETERS ls_print_params
-                        WITHOUT SPOOL DYNPRO
-                        "USER lv_user
-                        VIA JOB lv_jobname NUMBER lv_jobnumber
-                        AND RETURN.
-
-
-      IF sy-subrc = 0.
-        " читаем задачу
-        CALL FUNCTION 'BP_JOB_READ'
-          EXPORTING
-            job_read_jobcount = lv_jobnumber
-            job_read_jobname  = lv_jobname
-            job_read_opcode   = 20
-*           JOB_STEP_NUMBER   =
-*         IMPORTING
-*           JOB_READ_JOBHEAD  =
-*           JOBLOG_ATTRIBUTES =
-*           EPP_ATTRIBUTES    =
-*           EMAIL_NOTIFICATION          =
-          TABLES
-            job_read_steplist = lt_global_step_tbl
-*           SPOOL_ATTRIBUTES  =
-*         CHANGING
-*           RET               =
-*         EXCEPTIONS
-*           INVALID_OPCODE    = 1
-*           JOB_DOESNT_EXIST  = 2
-*           JOB_DOESNT_HAVE_STEPS       = 3
-*           OTHERS            = 4
-          .
-        IF sy-subrc <> 0.
-          RETURN.
-        ENDIF.
-
-        MOVE-CORRESPONDING lt_global_step_tbl[ 1 ] TO ls_step.
-        "ls_step-authcknam = lv_user.
-
-        CALL FUNCTION 'BP_CHANGE_JOB_STEP'
-          EXPORTING
-            jobname                   = lv_jobname
-            jobcount                  = lv_jobnumber
-            step                      = ls_step
-            step_num                  = 1
-"           ALLPRIPAR                 =
-"           ALLARCPAR                 =
-"           PRINT_MASK                =
-"           ARCH_MASK                 =
-          EXCEPTIONS
-            cannot_modify_job         = 1
-            wrong_step_number         = 2
-            cannot_read_job           = 3
-            cannot_get_priarc_params  = 4
-            error_modifying_worktable = 5
-            error_reading_worktable   = 6
-            OTHERS                    = 7.
-        IF sy-subrc <> 0.
-          RETURN.
-        ENDIF.
-
-*        CALL FUNCTION 'JOB_CLOSE'
-*          EXPORTING
-*            jobcount             = lv_jobnumber
-*            jobname              = lv_jobname
-*            strtimmed            = abap_true
-*          EXCEPTIONS
-*            cant_start_immediate = 1
-*            invalid_startdate    = 2
-*            jobname_missing      = 3
-*            job_close_failed     = 4
-*            job_nosteps          = 5
-*            job_notex            = 6
-*            lock_failed          = 7
-*            OTHERS               = 8.
-*        IF sy-subrc <> 0.
-*
-*        ENDIF.
-      ENDIF.
+    EXPORT lv_sim FROM iv_simulate
+    TO MEMORY ID zcl_hr0043_leavereq_cr_dpc_ext=>mc_memory_simulate_id.
+    IF sy-subrc NE 0.
+      RETURN.
     ENDIF.
-    cl_salv_bs_runtime_info=>clear_all( ).
 
   ENDMETHOD.
 
 
-  METHOD get_plan_current_year.
-    DATA: lt_p2001 TYPE STANDARD TABLE OF p2001.
-    DATA: lt_p2001_filter TYPE SORTED TABLE OF p2001 WITH NON-UNIQUE KEY subty begda.
-    DATA: lt_p2001_plan TYPE SORTED TABLE OF p2001 WITH NON-UNIQUE KEY begda.
-    DATA: lt_pdpnr TYPE TABLE OF pdpnr.
-    DATA: lt_pdpsp TYPE  TABLE OF pdpsp.
-    DATA: lt_pdpsp_sort TYPE SORTED TABLE OF pdpsp WITH NON-UNIQUE KEY datum ftkla.
-    DATA: lt_pdsppsp TYPE TABLE OF pdsppsp.
+  METHOD get_memory_for_sumulate_lrq.
+
+    IMPORT lv_sim TO rv_simulate
+    FROM MEMORY ID zcl_hr0043_leavereq_cr_dpc_ext=>mc_memory_simulate_id.
+    IF sy-subrc NE 0.
+      RETURN.
+    ENDIF.
+
+  ENDMETHOD.
 
 
+  METHOD set_memory_for_check.
+    EXPORT lf_no_check FROM iv_simulate
+          TO MEMORY ID zcl_hr0043_leavereq_cr_dpc_ext=>mc_memory_id.
+  ENDMETHOD.
 
-    ev_plan  = 0.
+
+  METHOD get_memory_for_check.
+    DATA(lv_no_check) = space.
+
+    IMPORT lv_no_check TO rv_simulate
+    FROM MEMORY ID zcl_hr0043_leavereq_cr_dpc_ext=>mc_memory_id.
+    IF sy-subrc NE 0.
+      RETURN.
+    ENDIF.
+  ENDMETHOD.
 
 
-    lt_p2001 = zcl_pa_it2001=>read_it2001(
-        iv_pernr  = iv_pernr
+  METHOD set_lrq_deletable.
+    DATA: lt_leave_req_detail TYPE SORTED TABLE OF hcmfab_s_lrq_request_detail
+          WITH NON-UNIQUE KEY request_id.
+    DATA: ls_leave_req_detail TYPE  hcmfab_s_lrq_request_detail.
+
+    ev_deletable = abap_false.
+    "CA_PT_REQ_HEADER->READ_FROM_PTREQ_HEADER
+    lt_leave_req_detail = it_req_detail.
+
+    ls_leave_req_detail = lt_leave_req_detail[ request_id = iv_requestid  ].
+    IF sy-subrc EQ 0 AND ls_leave_req_detail-status = 'SENT'.
+      ev_deletable = abap_true.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD set_lrq_editable.
+    DATA: lt_leave_req_detail TYPE SORTED TABLE OF hcmfab_s_lrq_request_detail
+          WITH NON-UNIQUE KEY request_id.
+    DATA: ls_leave_req_detail TYPE  hcmfab_s_lrq_request_detail.
+
+    lt_leave_req_detail = it_req_detail.
+
+    ls_leave_req_detail = lt_leave_req_detail[ request_id = iv_requestid  ].
+    IF sy-subrc EQ 0 AND ( ls_leave_req_detail-status = 'REJECTED' OR
+        ls_leave_req_detail-status = 'SENT' ).
+      cv_editable = abap_false.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+  METHOD get_curr_balance.
+
+    DATA: lv_diff2006_days TYPE ptm_quonum VALUE 0.
+    DATA: lv_p000_days TYPE ptm_quonum VALUE 0.
+    DATA: lv_avail_days TYPE ptm_quonum VALUE 0.
+    DATA: lv_ktart TYPE ktart.
+    DATA: lv_sum_flag1 TYPE ptm_quonum VALUE 0.
+    DATA: lv_req_days TYPE ptm_quonum VALUE 0.
+    ev_quota_days = 0.
+
+    " get ktart for 01/05/07
+    zcl_hr0043_utils=>get_ktart_by_abs(
+        EXPORTING iv_abscode = iv_subty
+        IMPORTING ev_ktart = lv_ktart
     ).
-    " data moved to sorted table
-    lt_p2001_filter = lt_p2001.
 
-    " ---- ищем план c begda >= sy-datum
-    lt_p2001_plan = FILTER #( lt_p2001_filter WHERE subty = 'P000' AND begda >= sy-datum  ).
+    " сумма diff из 2006
+    zcl_hr0043_utils=>get_diff_2006(
+        EXPORTING iv_pernr = iv_pernr
+                  iv_ktart = lv_ktart
+        IMPORTING ev_diff2006_days  = lv_diff2006_days
+    ).
 
-    lt_pdpnr = VALUE #( ( pernr = iv_pernr error = abap_false ) ).
+    IF lv_ktart EQ '01'.
+      "  сумма Р000 из 2001
+      zcl_hr0043_utils=>get_p000_2001(
+          EXPORTING iv_pernr = iv_pernr
+          IMPORTING ev_p000_days  = lv_p000_days
+      ).
+      lv_avail_days = lv_diff2006_days - lv_p000_days.
 
-    LOOP AT lt_p2001_plan ASSIGNING FIELD-SYMBOL(<fs_p2001_plan>) WHERE begda <= iv_datum.
-    "#EC CI_SORTSEQ необходимо учитывать неравенство
-      CALL FUNCTION 'HR_PERSON_READ_WORK_SCHEDULE'
+      " определяем есть ли лимиты будущих периодов
+      DATA(lv_is_limits) = zcl_hr0043_utils=>check_future_limit_exists(
+          EXPORTING
+              iv_pernr = iv_pernr
+              iv_ktart = '01'
+          IMPORTING
+              ev_sum_flag1 = lv_sum_flag1
+      ).
+      " если есть ЛБП выводим флаг1
+      IF lv_is_limits EQ abap_true.
+        lv_avail_days = lv_sum_flag1.
+      ENDIF.
+    ELSE.
+      lv_avail_days = lv_diff2006_days.
+    ENDIF. " ktart = 01
+
+    " получаем дни из дат
+    zcl_hr0043_utils=>get_days_from_dates(
+        EXPORTING iv_pernr = iv_pernr
+        iv_begda = iv_begda
+        iv_endda = iv_endda
+        IMPORTING ev_days = lv_req_days ).
+
+    ev_quota_days = lv_avail_days - lv_req_days.
+
+  ENDMETHOD.
+
+
+  METHOD get_reserved_req.
+    DATA: lt_workitem TYPE TABLE OF sww_wiid.
+    DATA: ls_wihdr TYPE  swr_wihdr.
+    DATA: lv_ret TYPE sy-subrc.
+    DATA: lv_begda TYPE datum.
+    DATA: lv_endda TYPE datum.
+    DATA: lv_reserved_days TYPE ptm_quonum VALUE 0.
+
+    ev_reserved_days = 0.
+
+    " --- get array of request_id
+    SELECT a~item_id, a~operation, a~abwtg, hextobin( a~item_id ) AS  item_id16,
+          i~item_list_id AS item_item_list_id, i~item_ins AS item_item_ins,
+          h~request_id, h~item_list_id AS req_item_list_id, h~status, h~workitem_id
+          FROM
+            ptreq_attabsdata AS a JOIN ptreq_items AS i ON i~item_ins = hextobin( a~item_id )
+          JOIN
+            ptreq_header AS h ON h~item_list_id = i~item_list_id
+          WHERE
+            a~pernr = @iv_pernr AND
+            a~subty =  @iv_subty
+          ORDER BY h~request_id
+          INTO TABLE @DATA(lt_ptreq_header).
+
+    IF line_exists( lt_ptreq_header[ 1 ] ).
+      LOOP AT lt_ptreq_header ASSIGNING FIELD-SYMBOL(<lv_wid>).
+        APPEND INITIAL LINE TO lt_workitem ASSIGNING FIELD-SYMBOL(<lv_val>).
+        <lv_val> = <lv_wid>-workitem_id.
+      ENDLOOP.
+    ENDIF.
+
+    SORT lt_workitem.
+    DELETE ADJACENT DUPLICATES FROM lt_workitem.
+
+    LOOP AT lt_workitem ASSIGNING <lv_val>.
+      " проверяем что заявка не COMPLETED
+      CALL FUNCTION 'SAP_WAPI_GET_HEADER'
         EXPORTING
-          begin_date         = <fs_p2001_plan>-begda
-          end_date           = <fs_p2001_plan>-endda
-        TABLES
-          pernr_tab          = lt_pdpnr
-          psp                = lt_pdpsp
-          day_psp            = lt_pdsppsp
-* CHANGING
-*         CH_AUTH_INFTY_TAB  =
-        EXCEPTIONS
-          error_in_build_psp = 1
-          OTHERS             = 2.
-      IF sy-subrc EQ 0.
-        lt_pdpsp_sort = lt_pdpsp.
-        ev_plan = ev_plan + REDUCE #( INIT lv_sum TYPE zz_plan
-                                       FOR ls_pdpsp_sort IN
-                                       FILTER #( lt_pdpsp_sort
-                                                 WHERE ftkla EQ '0' AND datum <= iv_datum )
-                                       NEXT lv_sum = lv_sum + 1 ).
+          workitem_id         = <lv_val>
+        IMPORTING
+          workitem_attributes = ls_wihdr
+          return_code         = lv_ret.
 
+      " читаем контейнер потока
+      IF ls_wihdr-wi_stat NE 'COMPLETED'.
+        " получаем даты из контейнера потока
+        zcl_hr0043_utils=>get_wf_dates(
+            EXPORTING iv_wiid = <lv_val>
+            IMPORTING ev_begda = lv_begda ev_endda = lv_endda ).
+        " получаем дни из дат
+        zcl_hr0043_utils=>get_days_from_dates(
+            EXPORTING iv_pernr = iv_pernr
+            iv_begda = lv_begda
+            iv_endda = lv_endda
+            IMPORTING ev_days = lv_reserved_days ).
+
+        ev_reserved_days = ev_reserved_days + lv_reserved_days.
       ENDIF.
 
     ENDLOOP.
 
-
   ENDMETHOD.
+
+  METHOD get_wf_dates.
+    DATA: lo_iterator_handle      TYPE REF  TO if_swf_cnt_iterator.
+    DATA: lo_element_handle TYPE REF  TO if_swf_cnt_element,
+          lo_cx_exception   TYPE REF TO cx_swf_ifs_exception,
+          lv_element_name   TYPE swfdname,
+          lo_value_ref      TYPE REF TO data.
+    FIELD-SYMBOLS: <ls_struct> TYPE zshr_data_pernr.
+
+    TRY.
+        DATA(lo_cont) = cl_swf_run_wim_factory=>find_by_wiid( im_wiid = iv_wiid )->get_wi_container( ).
+
+        lo_cont->get_iterator(
+            IMPORTING
+              ex_iterator             = lo_iterator_handle
+              ex_element              = lo_element_handle ).
+
+        WHILE NOT lo_element_handle IS INITIAL.
+
+          TRY.
+              CALL METHOD lo_element_handle->get_name
+                IMPORTING
+                  name = lv_element_name.
+
+              IF  lv_element_name EQ 'GS_DATA_PERNR'.
+                lo_element_handle->get_value_ref(
+                  IMPORTING value_ref = lo_value_ref
+                ).
+                ASSIGN lo_value_ref->* TO <ls_struct>.
+                ev_begda = <ls_struct>-begda.
+                ev_endda = <ls_struct>-endda.
+                CLEAR lo_element_handle.
+              ENDIF.
+
+            CATCH cx_swf_ifs_exception INTO lo_cx_exception.
+
+          ENDTRY.
+
+          CLEAR lo_element_handle.
+*   get reference of next element
+          CALL METHOD lo_iterator_handle->get_next
+            RECEIVING
+              element = lo_element_handle.
+        ENDWHILE.
+
+      CATCH cx_swf_run_wim_enq_failed cx_swf_run_wim_read_failed cx_swf_run_wim INTO DATA(lx_swf_run).
+        RETURN.
+    ENDTRY.
+  ENDMETHOD.
+
+
+  METHOD get_days_from_dates.
+
+    DATA: lt_pdpnr TYPE TABLE OF pdpnr.
+    DATA: lt_pdpsp TYPE  TABLE OF pdpsp.
+    DATA: lt_pdpsp_sort TYPE SORTED TABLE OF pdpsp WITH NON-UNIQUE KEY ftkla.
+    DATA: lt_pdsppsp TYPE TABLE OF pdsppsp.
+
+    ev_days = 0.
+
+    " ---- получаем только рабочие дни из заявки
+    lt_pdpnr = VALUE #( ( pernr = iv_pernr error = abap_false ) ).
+    CALL FUNCTION 'HR_PERSON_READ_WORK_SCHEDULE'
+      EXPORTING
+        begin_date         = iv_begda
+        end_date           = iv_endda
+      TABLES
+        pernr_tab          = lt_pdpnr
+        psp                = lt_pdpsp
+        day_psp            = lt_pdsppsp
+      EXCEPTIONS
+        error_in_build_psp = 1
+        OTHERS             = 2.
+    IF sy-subrc EQ 0.
+      lt_pdpsp_sort = lt_pdpsp.
+      ev_days = ev_days + REDUCE #( INIT lv_sum TYPE zz_plan
+                                     FOR ls_pdpsp_sort IN
+                                     FILTER #( lt_pdpsp_sort
+                                               WHERE ftkla EQ '0' )
+                                     NEXT lv_sum = lv_sum + 1 ).
+
+    ENDIF.
+  ENDMETHOD.
+
 ENDCLASS.
