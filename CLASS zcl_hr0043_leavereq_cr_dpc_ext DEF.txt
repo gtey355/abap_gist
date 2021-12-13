@@ -5,8 +5,8 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext DEFINITION
 
   PUBLIC SECTION.
 
-    CONSTANTS mc_memory_id TYPE char20 VALUE 'HR0043_LEAVEREQ_DPCE' ##NO_TEXT.
-    CONSTANTS mc_memory_second_id TYPE char22 VALUE 'HR0043_LEAVEREQ_DPCE_2' ##NO_TEXT.
+    CONSTANTS mc_memory_id TYPE char25 VALUE 'ZHR0043_LEAVEREQ_DPCE' ##NO_TEXT.
+    CONSTANTS mc_memory_simulate_id TYPE char25 VALUE 'ZHR0043_LEAVEREQ_SIM' ##NO_TEXT.
 
     METHODS /iwbep/if_mgw_appl_srv_runtime~execute_action
         REDEFINITION .
@@ -20,13 +20,15 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext DEFINITION
 
     METHODS absencetyp_get_deep_entityset
         REDEFINITION .
+    METHODS calculate_leave_duration
+        REDEFINITION .
     METHODS leaverequestcoll_create_entity
         REDEFINITION .
     METHODS leaverequestcoll_get_entityset
         REDEFINITION .
     METHODS timeaccountcolle_get_entityset
         REDEFINITION .
-    METHODS calculate_leave_duration
+    METHODS leaverequestcoll_delete_entity
         REDEFINITION .
   PRIVATE SECTION.
 ENDCLASS.
@@ -142,7 +144,7 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
   METHOD absencetyp_get_deep_entityset.
     DATA: lv_text TYPE zz_absn.
     FIELD-SYMBOLS: <lt_entityset> TYPE STANDARD TABLE.
-    FIELD-SYMBOLS: <fs_entityset> TYPE any.
+    FIELD-SYMBOLS: <ls_entityset> TYPE any.
 
     TRY.
         super->absencetyp_get_deep_entityset(
@@ -171,15 +173,15 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
         ASSIGN er_entityset->* TO <lt_entityset>.
 
 
-        LOOP AT <lt_entityset> ASSIGNING FIELD-SYMBOL(<fs_line>).
+        LOOP AT <lt_entityset> ASSIGNING FIELD-SYMBOL(<ls_line>).
 
           " заполняем новые длинные тексты abs
-          ASSIGN COMPONENT 'att_abs_type' OF STRUCTURE <fs_line> TO FIELD-SYMBOL(<lv_att_abs_type>).
+          ASSIGN COMPONENT 'att_abs_type' OF STRUCTURE <ls_line> TO FIELD-SYMBOL(<lv_att_abs_type>).
           IF  sy-subrc NE 0.
             RAISE EXCEPTION TYPE /iwbep/cx_mgw_busi_exception.
           ENDIF.
 
-          ASSIGN COMPONENT 'ZZ_ABSN_LTEXT' OF STRUCTURE <fs_line> TO FIELD-SYMBOL(<lv_zz_absn_ltext>).
+          ASSIGN COMPONENT 'ZZ_ABSN_LTEXT' OF STRUCTURE <ls_line> TO FIELD-SYMBOL(<lv_zz_absn_ltext>).
           IF  sy-subrc NE 0.
             RAISE EXCEPTION TYPE /iwbep/cx_mgw_busi_exception.
           ENDIF.
@@ -223,6 +225,9 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
     DATA: lv_rest_adv_days TYPE ptm_quonum.
     DATA: lv_check_cond TYPE boolean_01.
     DATA lv_numd  TYPE int1.
+    DATA lv_dummy TYPE c.
+    DATA: lv_plan_text TYPE string.
+    DATA: lv_ktart TYPE ktart.
 
     DATA(lv_sub2006) = zcl_hr0043_utils=>mv_sub2006.
     DATA(lv_abex) = zcl_hr0043_utils=>mv_abex.
@@ -231,32 +236,19 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
     DATA(lo_message_container) = me->mo_context->get_message_container( ).
 
 
+
     TRY.
 * ----------- выполняем пользовательские доп проверки
         io_data_provider->read_entry_data( IMPORTING es_data = ls_ui_leave_request ).
 **"< 22.09.21 EzhovDA отключаем проверки дат для ZZ_REPEAT = ABAP_TRUE
-        EXPORT lf_no_check FROM ls_ui_leave_request-zz_repeat
-    TO MEMORY ID zcl_hr0043_leavereq_cr_dpc_ext=>mc_memory_id.
+        zcl_hr0043_utils=>set_memory_for_check( ls_ui_leave_request-zz_repeat ).
+
 **"/> 22.09.21 EzhovDA
 
 ** ---блок пользовательских проверок
 * выполняются только если заявка регистрируется первый раз
         IF ls_ui_leave_request-zz_repeat EQ abap_false.
-*        " ---- проверка на аванс, берущийся повторно - выполняется только
-*         "--- если запрос публикуется впервые zz_repeat eq abap_false
-*        DATA(lv_second_advancepay) =  zcl_hr0043_utils=>check_second_advancepay(
-*                                        EXPORTING
-*                                          is_leave_request = ls_ui_leave_request
-*                                      ).
-*        IF  lv_second_advancepay EQ abap_true.
-*          lt_messages = VALUE #( type = 'E' id = 'ZHR0043_MSG' number = '005'  ( ) ).
-**          lo_message_container->add_messages_from_bapi(
-**                it_bapi_messages         = lt_messages
-**                iv_determine_leading_msg = /iwbep/if_message_container=>gcs_leading_msg_search_option-last
-**                iv_add_to_response_header = abap_true
-**                iv_entity_type           = iv_entity_name
-**          ).
-*        ENDIF.
+
 *-------- проверка ТН на диспансеризацию 2006
           IF  ls_ui_leave_request-absence_type EQ lv_sub2006.
             DATA(lv_disp) = zcl_hr0043_utils=>get_disp(
@@ -267,7 +259,8 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
             ).
 
             IF  lv_disp EQ abap_true.
-              lt_messages = VALUE #( type = 'E' id = 'ZHR0043_MSG' number = '002'  ( ) ).
+              MESSAGE ID 'ZHR0043_MSG' TYPE 'E' NUMBER 002 INTO lv_plan_text.
+              lt_messages = VALUE #( type = sy-msgty id = sy-msgid number = sy-msgno  ( ) ).
               lo_message_container->add_messages_from_bapi(
                     it_bapi_messages         = lt_messages
                     iv_determine_leading_msg = /iwbep/if_message_container=>gcs_leading_msg_search_option-last
@@ -286,8 +279,9 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
           ).
 
           IF lv_crossplan EQ abap_true.
+            MESSAGE ID 'ZHR0043_MSG' TYPE 'E' NUMBER 004 INTO lv_plan_text.
+            lt_messages = VALUE #( type = sy-msgty id = sy-msgid number = sy-msgno  ( ) ).
 
-            lt_messages = VALUE #( type = 'E' id = 'ZHR0043_MSG' number = '004'  ( ) ).
             lo_message_container->add_messages_from_bapi(
                   it_bapi_messages         = lt_messages
                   iv_determine_leading_msg = /iwbep/if_message_container=>gcs_leading_msg_search_option-last
@@ -305,11 +299,10 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
             IMPORTING
               ev_numd = lv_numd
              ) = abap_false.
-            IF 1 = 2.
-              MESSAGE e008(zhr0045).
-            ENDIF.
 
-            lt_messages = VALUE #( type = 'E' id = 'ZHR0045' number = '008' message_v1 = lv_numd  ( ) ).
+
+            MESSAGE ID 'ZHR0043_MSG' TYPE 'E' NUMBER 008 INTO lv_plan_text.
+            lt_messages = VALUE #( type = sy-msgty id = sy-msgid number = sy-msgno message_v1 = lv_numd  ( ) ).
             lo_message_container->add_messages_from_bapi(
                   it_bapi_messages         = lt_messages
                   iv_determine_leading_msg = /iwbep/if_message_container=>gcs_leading_msg_search_option-last
@@ -320,72 +313,70 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
 *        } HR0045
 
 * -------- проверка что берет аванс из скрытых 7 дней
-          DATA(lv_check_take_hiddenadvance) =  zcl_hr0043_utils=>check_take_hidden_advance(
-                                EXPORTING
-                                  iv_pernr = ls_ui_leave_request-employee_number
-                                  iv_begda = ls_ui_leave_request-begda
-                                  iv_endda = ls_ui_leave_request-endda
-                                IMPORTING
-                                  ev_rest_adv_days = lv_rest_adv_days "остаток флаг1
-           ).
+          zcl_hr0043_utils=>get_ktart_by_abs(
+                 EXPORTING iv_abscode = ls_ui_leave_request-absence_type
+                 IMPORTING ev_ktart = lv_ktart
+          ).
 
-          IF ( lv_check_take_hiddenadvance EQ 'A' OR lv_check_take_hiddenadvance EQ 'G' )
-             AND  NOT line_exists( lt_messages[ 1 ] ).
-            TRY.
-                " перед выдачей предупреждения об авансе проверяем что нет других ошибок
-                " от пользовательстких проверок
-                " если нет - то создаем заявку и проверяем, есть ли в ней ошибки
-                " если ошибки в заявке есть - то их отправляем вместе с остальными
-                " если ошибок в заявке нет - выдаем предупреждение об авансе
-                EXPORT lf_no_check_second FROM abap_true
-                TO MEMORY ID zcl_hr0043_leavereq_cr_dpc_ext=>mc_memory_second_id.
+          IF lv_ktart EQ '01'.
+            DATA(lv_check_take_hiddenadvance) =  zcl_hr0043_utils=>check_take_hidden_advance(
+                                  EXPORTING
+                                    iv_pernr = ls_ui_leave_request-employee_number
+                                    iv_begda = ls_ui_leave_request-begda
+                                    iv_endda = ls_ui_leave_request-endda
+                                    iv_ktart = lv_ktart
+                                  IMPORTING
+                                    ev_rest_adv_days = lv_rest_adv_days "остаток флаг1
+             ).
 
-                super->leaverequestcoll_create_entity(
-                     EXPORTING
-                       iv_entity_name          = iv_entity_name
-                       iv_entity_set_name      = iv_entity_set_name
-                       iv_source_name          = iv_source_name
-                       it_key_tab              = it_key_tab
-                       io_tech_request_context = io_tech_request_context
-                       it_navigation_path      = it_navigation_path
-                       io_data_provider        = io_data_provider
-                     IMPORTING
-                       er_entity               = er_entity
-                ).
+            IF ( lv_check_take_hiddenadvance EQ 'A' OR lv_check_take_hiddenadvance EQ 'G' )
+               AND  NOT line_exists( lt_messages[ 1 ] ).
+              TRY.
+                  " перед выдачей предупреждения об авансе моделируем запрос
+                  IF ls_ui_leave_request-zz_repeat EQ abap_false. " первичный запрос всегда моделируем
+                    zcl_hr0043_utils=>set_memory_for_sumulate_lrq( abap_true ).
+                  ELSE. " second request
+                    zcl_hr0043_utils=>set_memory_for_sumulate_lrq( abap_false ).
+                  ENDIF.
 
-              CATCH /iwbep/cx_mgw_busi_exception INTO lo_exc_busi.
-                " есть ошибки
-                RAISE EXCEPTION TYPE /iwbep/cx_mgw_busi_exception
-                  EXPORTING
-                    message_container = lo_message_container.
-            ENDTRY.
-            " ошибок заявки нет - выдаем предупреждение об авансе
-            lt_messages = VALUE #( type = 'E' id = 'ZHR0043_MSG' number = '006' message_v1 = lv_numd  ( ) ).
-            lo_message_container->add_messages_from_bapi(
-                  it_bapi_messages         = lt_messages
-                  iv_determine_leading_msg = /iwbep/if_message_container=>gcs_leading_msg_search_option-last
-                  iv_add_to_response_header = abap_true
-                  iv_entity_type           = iv_entity_name
-            ).
-*          ELSEIF lv_check_take_hiddenadvance EQ 'G' AND  NOT line_exists( lt_messages[ 1 ] ).
-*            " еслт новая генерация - сразу выдаем предупреждение об авансе
-*            lt_messages = VALUE #( type = 'E' id = 'ZHR0043_MSG' number = '006' message_v1 = 'G'  ( ) ).
-*            lo_message_container->add_messages_from_bapi(
-*                  it_bapi_messages         = lt_messages
-*                  iv_determine_leading_msg = /iwbep/if_message_container=>gcs_leading_msg_search_option-last
-*                  iv_add_to_response_header = abap_true
-*                  iv_entity_type           = iv_entity_name
-*             ).
-
-          ELSEIF lv_check_take_hiddenadvance EQ 'E'.
-            lt_messages = VALUE #( type = 'E' id = 'ZHR0043_MSG' number = '000' message_v1 = lv_numd  ( ) ).
-            lo_message_container->add_messages_from_bapi(
-                  it_bapi_messages         = lt_messages
-                  iv_determine_leading_msg = /iwbep/if_message_container=>gcs_leading_msg_search_option-last
-                  iv_add_to_response_header = abap_true
-                  iv_entity_type           = iv_entity_name
+                  super->leaverequestcoll_create_entity(
+                       EXPORTING
+                         iv_entity_name          = iv_entity_name
+                         iv_entity_set_name      = iv_entity_set_name
+                         iv_source_name          = iv_source_name
+                         it_key_tab              = it_key_tab
+                         io_tech_request_context = io_tech_request_context
+                         it_navigation_path      = it_navigation_path
+                         io_data_provider        = io_data_provider
+                       IMPORTING
+                         er_entity               = er_entity
                   ).
-          ENDIF.
+
+                CATCH /iwbep/cx_mgw_busi_exception INTO lo_exc_busi.
+                  MESSAGE ID 'ZHR0043_MSG' TYPE 'E' NUMBER 006 INTO lv_plan_text.
+                  lt_messages = VALUE #( type = sy-msgty id = sy-msgid number = sy-msgno message_v1 = lv_numd  ( ) ).
+                  lo_message_container->add_messages_from_bapi(
+                        it_bapi_messages         = lt_messages
+                        iv_determine_leading_msg = /iwbep/if_message_container=>gcs_leading_msg_search_option-last
+                        iv_add_to_response_header = abap_true
+                        iv_entity_type           = iv_entity_name
+                  ).
+                  RAISE EXCEPTION TYPE /iwbep/cx_mgw_busi_exception
+                    EXPORTING
+                      message_container = lo_message_container.
+              ENDTRY.
+
+            ELSEIF lv_check_take_hiddenadvance EQ 'E'.
+              MESSAGE ID 'ZHR0043_MSG' TYPE 'E' NUMBER 000 INTO lv_plan_text.
+              lt_messages = VALUE #( type = sy-msgty id = sy-msgid number = sy-msgno message_v1 = lv_numd  ( ) ).
+              lo_message_container->add_messages_from_bapi(
+                    it_bapi_messages         = lt_messages
+                    iv_determine_leading_msg = /iwbep/if_message_container=>gcs_leading_msg_search_option-last
+                    iv_add_to_response_header = abap_true
+                    iv_entity_type           = iv_entity_name
+                    ).
+            ENDIF. "
+          ENDIF. " 01
         ENDIF. " ls_ui_leave_request-zz_repeat EQ abap_false.
 
         " выбрасываем ошибку после пользовательских проверок
@@ -396,6 +387,13 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
         ENDIF.
 
 ****** - выполняем стандартные проверки если пользовательские прошли без ошибок
+
+** --- 1 - моделируем запрос - тестим есть ли в нем ошибки
+        IF ls_ui_leave_request-zz_repeat EQ abap_false. " первичный запрос всегда моделируем
+          zcl_hr0043_utils=>set_memory_for_sumulate_lrq( abap_true ).
+        ELSE. " second request
+          zcl_hr0043_utils=>set_memory_for_sumulate_lrq( abap_false ).
+        ENDIF.
 
         super->leaverequestcoll_create_entity(
           EXPORTING
@@ -415,20 +413,10 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
 
         lo_message_container = lo_exc_busi->get_msg_container( ).
         "save original messages
-        lt_saved_messages =  lo_message_container->get_messages( ). "#EC CI_CONV_OK there is standard
+        lt_saved_messages =  lo_message_container->get_messages( ). "#EC CI_CONV_OK there is a standard call
 
-        " ----- 1 check - игнорируем, так как обработка идет по другому алгоритму
-        TRY.
-            ls_changed_msg =
-            lt_saved_messages[ number = '014' id = 'HRTIM00REC' type = 'E' ]. "#EC CI_STDSEQ  определено в стандарте
-                                 "#EC CI_CONV_OK определено в стандарте
 
-          CATCH cx_root.
-        ENDTRY.
-
-        IF  ls_changed_msg IS NOT INITIAL.
-          " dummy
-        ENDIF. " --1 check
+        " ----- 1 check '014' id = 'HRTIM00REC' type = 'E'
 
         " ------ 3 check
         TRY.
@@ -466,12 +454,13 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
 
           ls_changed_msg-message_v1 = |{ lv_pa_text } / { lv_abs_text }|. "#EC CI_CONV_OK требования бизнеса
 
+          MESSAGE ID 'ZHR0043_MSG' TYPE 'E' NUMBER 001 INTO lv_plan_text.
           zcl_hr0043_utils=>change_standard_message(
           EXPORTING
             iv_entity_name          = iv_entity_name
             is_changed_message      = ls_changed_msg
-            iv_new_id               = 'ZHR0043_MSG'
-            iv_new_number           = '001'
+            iv_new_id               = sy-msgid
+            iv_new_number           = sy-msgno
             CHANGING
                co_message_container =  lo_message_container
          ).
@@ -487,12 +476,13 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
           CATCH cx_root.
         ENDTRY.
         IF  ls_changed_msg IS NOT INITIAL.
+          MESSAGE ID 'ZHR0043_MSG' TYPE 'E' NUMBER 003 INTO lv_plan_text.
           zcl_hr0043_utils=>change_standard_message(
           EXPORTING
             iv_entity_name          = iv_entity_name
             is_changed_message      = ls_changed_msg
-            iv_new_id               = 'ZHR0043_MSG'
-            iv_new_number           = '003'
+            iv_new_id               = sy-msgid
+            iv_new_number           = sy-msgno
             CHANGING
                co_message_container =  lo_message_container
          ).
@@ -536,6 +526,15 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
   METHOD leaverequestcoll_get_entityset.
 
     DATA: lv_text TYPE zz_absn.
+    DATA: lo_hcm_attabs_request_api TYPE REF TO cl_hcmfab_attabs_request_apis.
+    DATA: lo_filter                TYPE  REF TO /iwbep/if_mgw_req_filter,
+          lt_filter_select_options TYPE /iwbep/t_mgw_select_option,
+          lv_filter_str            TYPE string,
+          lt_messages              TYPE bapirettab,
+          lt_leave_req_detail      TYPE hcmfab_t_lrq_request_detail,
+          lt_calendar_data         TYPE hcmfab_t_lrq_calendar_data,
+          lv_startdate             TYPE dats,
+          lv_pernr                 TYPE p_pernr.
 
     TRY.
         super->leaverequestcoll_get_entityset(
@@ -556,26 +555,69 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
             es_response_context      = es_response_context
          ).
 
+        lo_filter = io_tech_request_context->get_filter( ).
+        lt_filter_select_options = lo_filter->get_filter_select_options( ).
+        lv_filter_str = lo_filter->get_filter_string( ).
+        LOOP AT lt_filter_select_options INTO DATA(ls_filter).
+          LOOP AT ls_filter-select_options INTO DATA(ls_filter_range).
+            CASE ls_filter-property.
+              WHEN 'BEGDA'.
+                lv_startdate = ls_filter_range-low.
+              WHEN 'EMPLOYEE_NUMBER'.
+                lv_pernr     = ls_filter_range-low.
+            ENDCASE.
+          ENDLOOP.
+        ENDLOOP.
+
+        cl_hcmfab_attabs_request_apis=>get_instance(
+          RECEIVING
+              ro_request_api = lo_hcm_attabs_request_api
+        ).
+
+        lo_hcm_attabs_request_api->read_emp_request_list(
+               EXPORTING
+                 iv_pernr         = lv_pernr
+                 iv_as_of_date    = lv_startdate
+                 iv_modus         = 'R'
+                 "iv_count_only    = io_tech_request_context->has_count( )
+               IMPORTING
+                 et_messages      = lt_messages
+                 et_requests      = lt_leave_req_detail
+                 et_calendar_data = lt_calendar_data
+         ).
+
         " схлопываем записи
         SORT et_entityset BY
         employee_number ASCENDING absence_type ASCENDING begda ASCENDING endda ASCENDING
-        approver_id DESCENDING.
+        version_no DESCENDING.
         DELETE ADJACENT DUPLICATES FROM  et_entityset COMPARING  employee_number absence_type begda endda.
 
 
-        LOOP AT et_entityset INTO DATA(ls_wa). "#EC CI_CONV_OK определено в стандарте
+        LOOP AT et_entityset ASSIGNING FIELD-SYMBOL(<ls_wa>). "#EC CI_CONV_OK определено в стандарте
           " заполняем новые длиннные тексты abs
           CLEAR lv_text.
           zcl_hr0043_utils=>get_abs_long_text(
              EXPORTING
-               iv_absence    = ls_wa-absence_type
+               iv_absence    = <ls_wa>-absence_type
              IMPORTING
-               ev_text = lv_text
+               ev_text = <ls_wa>-zz_absn_ltext
           ).
-          et_entityset[ request_id = ls_wa-request_id ]-zz_absn_ltext =
-            lv_text.              "#EC CI_STDSEQ определено в стандарте
-                                 "#EC CI_CONV_OK определено в стандарте
 
+          zcl_hr0043_utils=>set_lrq_deletable(
+              EXPORTING
+                iv_requestid = <ls_wa>-request_id
+                it_req_detail = lt_leave_req_detail
+              IMPORTING
+                ev_deletable = <ls_wa>-action_delete
+          ).
+
+          zcl_hr0043_utils=>set_lrq_editable(
+             EXPORTING
+               iv_requestid = <ls_wa>-request_id
+               it_req_detail = lt_leave_req_detail
+             CHANGING
+               cv_editable = <ls_wa>-action_modify
+         ).
 
         ENDLOOP.
 
@@ -593,7 +635,8 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
     DATA: ls_filter LIKE LINE OF it_filter_select_options.
     DATA: lv_startdate TYPE begda.
     DATA: lv_plan TYPE zz_plan.
-    DATA: lv_current_year TYPE sy-datum.
+    DATA: lv_current_year TYPE sy-datum VALUE '99999999'.
+    DATA(lr_allowed_types) =  zcl_hr0043_param=>mr_allowed_ktart.
 
     TRY.
         super->timeaccountcolle_get_entityset(
@@ -613,6 +656,8 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
             et_entityset             = et_entityset
             es_response_context      = es_response_context
          ).
+        " удаляем технические типы
+        DELETE et_entityset WHERE  time_type NOT IN lr_allowed_types.
 
         " ----- схлопываем записи
         SORT et_entityset BY pernr ASCENDING qtype ASCENDING filter_begda ASCENDING time_type ASCENDING.
@@ -663,33 +708,37 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
         cl_salv_bs_runtime_info=>clear_all( ).
 
 
-        " заполняем entity set
-        LOOP AT et_entityset ASSIGNING FIELD-SYMBOL(<fs_entityset>).
+        " ----------- заполняем entity set
+        LOOP AT et_entityset ASSIGNING FIELD-SYMBOL(<ls_entityset>).
           " get long text
           zcl_hr0043_utils=>get_limit_long_text(
              EXPORTING
-               iv_subty    = <fs_entityset>-time_type
+               iv_subty    = <ls_entityset>-time_type
              IMPORTING
-               ev_text = <fs_entityset>-zz_limn_ltext
+               ev_text = <ls_entityset>-zz_limn_ltext
           ).
 
           " get avail
-          IF line_exists( lt_pernr_res[ ktart =  <fs_entityset>-time_type ] ).
-            <fs_entityset>-zz_avail = lt_pernr_res[ ktart =  <fs_entityset>-time_type ]-accumulated.
+          IF line_exists( lt_pernr_res[ ktart =  <ls_entityset>-time_type ] ).
+            <ls_entityset>-zz_avail = lt_pernr_res[ ktart =  <ls_entityset>-time_type ]-accumulated -
+                lt_pernr_res[ ktart =  <ls_entityset>-time_type ]-used.
+            IF <ls_entityset>-zz_avail < 0.
+              <ls_entityset>-zz_avail = 0. "<ls_entityset>-zz_avail * -1.
+            ENDIF.
           ENDIF.
 
 
         ENDLOOP.
 
 *-----  a plan is got once and append to the output structure as a row
-        lv_current_year =  |{ sy-datum(4) }1231|.
-        zcl_hr0043_utils=>get_plan_current_year(
-          EXPORTING
-            iv_pernr = lv_pernr
-            iv_datum = lv_current_year
-           IMPORTING
-            ev_plan = lv_plan
+
+        "  сумма Р000 из 2001
+        zcl_hr0043_utils=>get_p000_2001(
+            EXPORTING iv_pernr = lv_pernr
+                       iv_currentyear = abap_true
+            IMPORTING ev_p000_days  = lv_plan
         ).
+
         MESSAGE ID 'ZHR0043_MSG' TYPE 'I' NUMBER 007 INTO DATA(lv_plan_text).
         APPEND VALUE #( pernr = lv_pernr time_type = 99
         zz_limn_ltext = lv_plan_text time_unit = '010' zz_avail = lv_plan ) TO et_entityset.
@@ -708,6 +757,7 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
           lv_pernr              TYPE pernr_d,
           lv_infotype           TYPE string,
           lv_subty              TYPE subty,
+          lv_ktart              TYPE ktart,
           ls_key                LIKE LINE OF lt_parameters,
           lt_time_accounts      TYPE hcmfab_t_lrq_quota_status,
           ls_time_account       LIKE LINE OF lt_time_accounts,
@@ -718,6 +768,7 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
     DATA: lv_diff2006_days TYPE ptm_quonum VALUE 0.
     DATA: lv_p000_days TYPE ptm_quonum VALUE 0.
     DATA: lv_avail_days TYPE ptm_quonum VALUE 0.
+    DATA: lv_reserved_days TYPE ptm_quonum VALUE 0.
 
     CLEAR rs_available_quota.
 
@@ -738,51 +789,51 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
       lv_subty = ls_key-value.
     ENDIF.
 
-    lo_hcm_att_abs_bl_api = cl_hcmfab_att_abs_bl_apis=>get_instance( ).
+    " get reserved requests
+    zcl_hr0043_utils=>get_reserved_req(
+        EXPORTING
+        iv_pernr = lv_pernr
+        iv_subty = lv_subty
+        IMPORTING
+        ev_reserved_days = lv_reserved_days
+    ).
 
-    IF lv_infotype EQ '2001'.
-      lv_attabs_ind = 'A'.
-    ELSE.
-      lv_attabs_ind = 'P'.
-    ENDIF.
-
-    lt_time_accounts = lo_hcm_att_abs_bl_api->get_time_accounts_att_abs_type(
-        iv_pernr      = lv_pernr
-        iv_subty      = lv_subty
-        iv_begda      = sy-datlo
-        iv_endda      = sy-datlo
-        iv_attabs_ind = lv_attabs_ind ).
-
-    READ TABLE lt_time_accounts INDEX 1 INTO ls_time_account.
-    IF sy-subrc NE 0.
-      RETURN.
-    ENDIF.
+    " get ktart for 01/05/07
+    zcl_hr0043_utils=>get_ktart_by_abs(
+        EXPORTING iv_abscode = lv_subty
+        IMPORTING ev_ktart = lv_ktart
+    ).
 
     " сумма diff из 2006
     zcl_hr0043_utils=>get_diff_2006(
         EXPORTING iv_pernr = lv_pernr
+                  iv_ktart = lv_ktart
         IMPORTING ev_diff2006_days  = lv_diff2006_days
     ).
-    "  сумма Р000 из 2001
-    zcl_hr0043_utils=>get_p000_2001(
-        EXPORTING iv_pernr = lv_pernr
-        IMPORTING ev_p000_days  = lv_p000_days
-    ).
-    lv_avail_days = lv_diff2006_days - lv_p000_days.
 
-    " определяем есть ли лимиты будущих периодов
-    DATA(lv_is_limits) = zcl_hr0043_utils=>check_future_limit_exists(
-        EXPORTING
-            iv_pernr = lv_pernr
-            iv_ktart = '01' " TODO
-        IMPORTING
-            ev_sum_flag1 = lv_sum_flag1
-    ).
-    " если есть ЛБП выводим флаг1
-    IF lv_is_limits EQ abap_true.
-      lv_avail_days = lv_sum_flag1.
-    ENDIF.
+    IF lv_ktart EQ '01'.
+      "  сумма Р000 из 2001
+      zcl_hr0043_utils=>get_p000_2001(
+          EXPORTING iv_pernr = lv_pernr
+          IMPORTING ev_p000_days  = lv_p000_days
+      ).
+      lv_avail_days = lv_diff2006_days - lv_p000_days - lv_reserved_days.
 
+      " определяем есть ли лимиты будущих периодов
+      DATA(lv_is_limits) = zcl_hr0043_utils=>check_future_limit_exists(
+          EXPORTING
+              iv_pernr = lv_pernr
+              iv_ktart = '01'
+          IMPORTING
+              ev_sum_flag1 = lv_sum_flag1
+      ).
+      " если есть ЛБП выводим флаг1
+      IF lv_is_limits EQ abap_true.
+        lv_avail_days = lv_sum_flag1.
+      ENDIF.
+    ELSE.
+      lv_avail_days = lv_diff2006_days - lv_reserved_days.
+    ENDIF. " ktart = 01
 
 * Begin of Note 2680898
     IF lv_bal_quota EQ 1 AND ls_time_account-time_unit IS NOT INITIAL AND ls_time_account-time_unit NE '99'. "LAK2794663
@@ -798,8 +849,6 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
     rs_available_quota-time_unit_text                = ls_time_account-time_unit_text.
     rs_available_quota-balance_quantity_rest_posted  = ls_time_account-balance_quantity_rest_posted.
     rs_available_quota-balance_rest_posted_requested =  lv_avail_days. " zhr043 "lv_bal_quota. "RAG2557290
-
-
 
   ENDMETHOD.
 
@@ -857,6 +906,7 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
     " сумма всех diff из 2006
     zcl_hr0043_utils=>get_diff_2006(
         EXPORTING iv_pernr = lv_pernr
+                  iv_ktart = lv_ktart
         IMPORTING ev_diff2006_days  = lv_diff2006_days
     ).
     "  сумма Р000 из 2001
@@ -914,5 +964,36 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
     ENDIF.
 
 
+  ENDMETHOD.
+
+
+  METHOD leaverequestcoll_delete_entity.
+    DATA: lv_requestid TYPE /iwbep/s_mgw_name_value_pair-value,
+          lo_exc_tech  TYPE REF TO /iwbep/cx_mgw_tech_exception. "scmg_case_guid.
+
+    TRY.
+        super->leaverequestcoll_delete_entity(
+          EXPORTING
+            iv_entity_name          = iv_entity_name
+            iv_entity_set_name      = iv_entity_set_name
+            iv_source_name          = iv_source_name
+            it_key_tab              = it_key_tab
+            io_tech_request_context = io_tech_request_context
+            it_navigation_path      = it_navigation_path
+            ).
+        " очищаем таблицу ПЭП
+        zcl_hr0043_utils=>read_param( EXPORTING it_param = it_key_tab
+                                               iv_name =   CONV #( zcl_hr0043_utils=>mc_reqid )
+                                    IMPORTING ev_value = lv_requestid
+        ).
+        DELETE FROM zthr_0043_sign WHERE guid = lv_requestid.
+        IF sy-subrc NE 0.
+          RAISE EXCEPTION lo_exc_tech.
+        ENDIF.
+
+
+      CATCH /iwbep/cx_mgw_busi_exception.
+      CATCH /iwbep/cx_mgw_tech_exception.
+    ENDTRY.
   ENDMETHOD.
 ENDCLASS.

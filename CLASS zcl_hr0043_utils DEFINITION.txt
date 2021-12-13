@@ -35,6 +35,7 @@ CLASS zcl_hr0043_utils DEFINITION
     CONSTANTS mc_action7 TYPE char40 VALUE 'checkFirstSign' ##NO_TEXT.
     CONSTANTS mc_action8 TYPE char40 VALUE 'setFirstXssSign' ##NO_TEXT.
     CONSTANTS mc_employp TYPE char10 VALUE 'EmployeeID' ##NO_TEXT.
+    CONSTANTS mc_reqid TYPE char10 VALUE 'RequestID' ##NO_TEXT.
     CONSTANTS mc_subtyp TYPE char10 VALUE 'Subty' ##NO_TEXT.
 
 
@@ -309,26 +310,26 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
       EXPORTING
         number = is_leave_request-employee_number.
 
-    LOOP AT lt_p2006 ASSIGNING FIELD-SYMBOL(<fs_p2006>)
+    LOOP AT lt_p2006 ASSIGNING FIELD-SYMBOL(<ls_p2006>)
      WHERE subty = iv_ktart AND begda GE sy-datum.
 
       TRY.
-          <fs_p2006>-flag1 =  CONV t_flag1( iv_rest_adv_days ). "#EC CI_CONV_OK flag1 имеет в стандарте тип c(1)
+          <ls_p2006>-flag1 =  CONV t_flag1( iv_rest_adv_days ). "#EC CI_CONV_OK flag1 имеет в стандарте тип c(1)
         CATCH cx_sy_conversion_error.
       ENDTRY.
 
       CALL FUNCTION 'HR_INFOTYPE_OPERATION'
         EXPORTING
           infty         = zcl_pa_infty=>mc_infty-i2006
-          number        = <fs_p2006>-pernr
-          subtype       = <fs_p2006>-subty
-          objectid      = <fs_p2006>-objps
-          lockindicator = <fs_p2006>-sprps
-          validityend   = <fs_p2006>-endda
-          validitybegin = <fs_p2006>-begda
-          recordnumber  = <fs_p2006>-seqnr
+          number        = <ls_p2006>-pernr
+          subtype       = <ls_p2006>-subty
+          objectid      = <ls_p2006>-objps
+          lockindicator = <ls_p2006>-sprps
+          validityend   = <ls_p2006>-endda
+          validitybegin = <ls_p2006>-begda
+          recordnumber  = <ls_p2006>-seqnr
           operation     = 'MOD'
-          record        = <fs_p2006>
+          record        = <ls_p2006>
         IMPORTING
           return        = ls_return.
 
@@ -661,12 +662,12 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
       ev_ce = abap_true.
     ENDIF.
 
-    LOOP AT lt_p0001 ASSIGNING FIELD-SYMBOL(<fs_p0001>)
+    LOOP AT lt_p0001 ASSIGNING FIELD-SYMBOL(<ls_p0001>)
      WHERE begda <= sy-datum AND endda >= sy-datum.
-      IF <fs_p0001>-persg = 1.
+      IF <ls_p0001>-persg = 1.
         ev_gence = abap_true.
       ENDIF.
-      IF <fs_p0001>-persg = 2.
+      IF <ls_p0001>-persg = 2.
         ev_gence = abap_false.
       ENDIF.
 
@@ -933,8 +934,8 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
       RETURN.
     ENDIF.
 
-    LOOP AT lt_p2006 ASSIGNING FIELD-SYMBOL(<fs_p2006>) WHERE subty = iv_ktart AND endda+0(4) = lv_future_year.
-      ev_sum_flag1 = ev_sum_flag1 + <fs_p2006>-flag1.
+    LOOP AT lt_p2006 ASSIGNING FIELD-SYMBOL(<ls_p2006>) WHERE subty = iv_ktart AND endda+0(4) = lv_future_year.
+      ev_sum_flag1 = ev_sum_flag1 + <ls_p2006>-flag1.
       rv_result = abap_true.
     ENDLOOP.
 
@@ -961,10 +962,10 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
     ENDIF.
 
     "-------  из 2006 получаем diff дни
-    LOOP AT lt_p2006_filter ASSIGNING FIELD-SYMBOL(<fs_p2006_filter>)
+    LOOP AT lt_p2006_filter ASSIGNING FIELD-SYMBOL(<ls_p2006_filter>)
         WHERE ktart IN lt_ktart.
-      IF   <fs_p2006_filter>-anzhl <>  <fs_p2006_filter>-kverb.
-        ev_diff2006_days = ev_diff2006_days + <fs_p2006_filter>-anzhl - <fs_p2006_filter>-kverb.
+      IF   <ls_p2006_filter>-anzhl <>  <ls_p2006_filter>-kverb.
+        ev_diff2006_days = ev_diff2006_days + <ls_p2006_filter>-anzhl - <ls_p2006_filter>-kverb.
       ENDIF.
     ENDLOOP.
   ENDMETHOD.
@@ -996,12 +997,12 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
     " ---- удаляем Р000 с совпадающими датами с другими отсутствиями (2001)
     lt_p2001_plan = FILTER #( lt_p2001_filter WHERE subty = 'P000' ).
     " выбираем строки с такими же датами как у Р000
-    LOOP AT lt_p2001_plan ASSIGNING FIELD-SYMBOL(<fs_p2001_plan>).
+    LOOP AT lt_p2001_plan ASSIGNING FIELD-SYMBOL(<ls_p2001_plan>).
       "ищем Р000 с дублирующими датами
       DATA(lt_p2001_find) =  FILTER #( lt_p2001_filter WHERE subty NE 'P000'
-       AND begda = <fs_p2001_plan>-begda AND endda = <fs_p2001_plan>-endda ).
+       AND begda = <ls_p2001_plan>-begda AND endda = <ls_p2001_plan>-endda ).
       IF line_exists( lt_p2001_find[ 1 ] ).
-        <fs_p2001_plan>-rem = 'X'. "
+        <ls_p2001_plan>-rem = 'X'. "
       ENDIF.
     ENDLOOP.
 
@@ -1020,13 +1021,13 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
       | ( endda+0(4) = { lv_curr_year } or endda+0(4) = { lv_next_year } )|.
     ENDIF.
 
-    LOOP AT lt_p2001_plan ASSIGNING <fs_p2001_plan> WHERE (lv_where_plan).
+    LOOP AT lt_p2001_plan ASSIGNING <ls_p2001_plan> WHERE (lv_where_plan).
 
       " получаем дни из дат
       zcl_hr0043_utils=>get_days_from_dates(
           EXPORTING iv_pernr = iv_pernr
-          iv_begda = <fs_p2001_plan>-begda
-          iv_endda = <fs_p2001_plan>-endda
+          iv_begda = <ls_p2001_plan>-begda
+          iv_endda = <ls_p2001_plan>-endda
           IMPORTING ev_days =  ev_p000_days ).
     ENDLOOP.
 
@@ -1074,10 +1075,13 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
       RETURN.
     ENDIF.
 
+    FREE MEMORY ID zcl_hr0043_leavereq_cr_dpc_ext=>mc_memory_simulate_id.
+
   ENDMETHOD.
 
 
   METHOD set_memory_for_check.
+
     EXPORT lf_no_check FROM iv_simulate
           TO MEMORY ID zcl_hr0043_leavereq_cr_dpc_ext=>mc_memory_id.
   ENDMETHOD.
@@ -1091,6 +1095,8 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
     IF sy-subrc NE 0.
       RETURN.
     ENDIF.
+
+    FREE MEMORY ID zcl_hr0043_leavereq_cr_dpc_ext=>mc_memory_id.
   ENDMETHOD.
 
 
@@ -1134,7 +1140,9 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
     DATA: lv_avail_days TYPE ptm_quonum VALUE 0.
     DATA: lv_ktart TYPE ktart.
     DATA: lv_sum_flag1 TYPE ptm_quonum VALUE 0.
-    DATA: lv_req_days TYPE ptm_quonum VALUE 0.
+    DATA: lv_req_days TYPE ptm_quonum VALUE 0,
+          lv_reserved_days TYPE ptm_quonum VALUE 0.
+
     ev_quota_days = 0.
 
     " get ktart for 01/05/07
@@ -1179,9 +1187,19 @@ CLASS zcl_hr0043_utils IMPLEMENTATION.
         EXPORTING iv_pernr = iv_pernr
         iv_begda = iv_begda
         iv_endda = iv_endda
-        IMPORTING ev_days = lv_req_days ).
+        IMPORTING ev_days = lv_req_days
+     ).
 
-    ev_quota_days = lv_avail_days - lv_req_days.
+    " получаем зарезервированные дни
+     zcl_hr0043_utils=>get_reserved_req(
+         EXPORTING iv_pernr = iv_pernr
+         iv_subty =  iv_subty
+         IMPORTING ev_reserved_days  =  lv_reserved_days
+     ).
+
+
+
+    ev_quota_days = lv_avail_days - lv_req_days - lv_reserved_days.
 
   ENDMETHOD.
 
