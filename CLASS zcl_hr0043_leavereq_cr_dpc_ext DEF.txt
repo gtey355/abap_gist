@@ -300,8 +300,10 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
               ev_numd = lv_numd
              ) = abap_false.
 
-
-            MESSAGE ID 'ZHR0043_MSG' TYPE 'E' NUMBER 008 INTO lv_plan_text.
+            IF 1 = 2.
+              MESSAGE e008(zhr0045) WITH lv_numd.
+            ENDIF.
+            MESSAGE ID 'ZHR0045' TYPE 'E' NUMBER 008 INTO lv_plan_text WITH lv_numd.
             lt_messages = VALUE #( type = sy-msgty id = sy-msgid number = sy-msgno message_v1 = lv_numd  ( ) ).
             lo_message_container->add_messages_from_bapi(
                   it_bapi_messages         = lt_messages
@@ -415,8 +417,6 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
         "save original messages
         lt_saved_messages =  lo_message_container->get_messages( ). "#EC CI_CONV_OK there is a standard call
 
-
-        " ----- 1 check '014' id = 'HRTIM00REC' type = 'E'
 
         " ------ 3 check
         TRY.
@@ -683,7 +683,7 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
         " получаем лимиты
         lt_limit = VALUE #(
          FOR ls_entityset IN et_entityset
-           ( sign = 'I' option = 'EQ' low = ls_entityset-time_type )
+           ( sign = zcl_ranges=>mc_sign-i option = zcl_ranges=>mc_option-eq low = ls_entityset-time_type )
         ).
 
 
@@ -804,7 +804,7 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
         IMPORTING ev_ktart = lv_ktart
     ).
 
-    " сумма diff из 2006
+    " сумма diff из 2006 - округленная без мантиссы
     zcl_hr0043_utils=>get_diff_2006(
         EXPORTING iv_pernr = lv_pernr
                   iv_ktart = lv_ktart
@@ -871,6 +871,7 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
     DATA: lv_diff2006_days TYPE ptm_quonum VALUE 0.
     DATA: lv_p000_days TYPE ptm_quonum VALUE 0.
     DATA: lv_avail_estim_days TYPE ptm_quonum VALUE 0.
+    DATA: lv_reserved_days TYPE ptm_quonum VALUE 0.
 
 
     DATA(lv_flag7days) = zcl_hr0130_param=>mv_flag. " 7 days
@@ -903,7 +904,8 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
         IMPORTING ev_ktart = lv_ktart
     ).
 
-    " сумма всех diff из 2006
+    " сумма всех diff из 2006 - округленная без мантиссы
+
     zcl_hr0043_utils=>get_diff_2006(
         EXPORTING iv_pernr = lv_pernr
                   iv_ktart = lv_ktart
@@ -915,53 +917,80 @@ CLASS zcl_hr0043_leavereq_cr_dpc_ext IMPLEMENTATION.
         IMPORTING ev_p000_days  = lv_p000_days
     ).
 
-    lv_avail_days = lv_diff2006_days - lv_p000_days.
-
-
-    CALL FUNCTION 'DAYS_BETWEEN_TWO_DATES'
-      EXPORTING
-        i_datum_bis             = lv_endda
-        i_datum_von             = lv_begda
-        i_kz_incl_bis           = '1'
-      IMPORTING
-        e_tage                  = lv_e_tage
-      EXCEPTIONS
-        days_method_not_defined = 1
-        OTHERS                  = 2.
-    IF sy-subrc <> 0.
-      RETURN.
-    ENDIF.
-
-    " --- check limit
-    DATA(lv_check_take_hiddenadvance) =  zcl_hr0043_utils=>check_take_hidden_advance(
-                                  EXPORTING
-                                    iv_pernr = lv_pernr
-                                    iv_begda = lv_begda
-                                    iv_endda = lv_endda
-                                    iv_ktart = lv_ktart
-                                  IMPORTING
-                                    ev_rest_adv_days = lv_rest_adv_days
+    " get reserved requests
+    zcl_hr0043_utils=>get_reserved_req(
+        EXPORTING
+        iv_pernr = lv_pernr
+        iv_subty = lv_abscode
+        IMPORTING
+        ev_reserved_days = lv_reserved_days
     ).
-    IF lv_check_take_hiddenadvance IS INITIAL. " укладываемся в сущ диапазон значений,
-      rs_leave_duration-abrtg = lv_e_tage. "lv_avail_days.
-      rs_leave_duration-time_unit_text = 'Дни'.
-      lv_avail_estim_days = lv_avail_days.
 
-    ELSEIF lv_check_take_hiddenadvance EQ 'G'. "лимита еще нет
-      rs_leave_duration-abrtg = lv_e_tage. "lv_avail_days + lv_flag7days. "7 days к остатку
-      rs_leave_duration-time_unit_text = 'Дни'.
-      lv_avail_estim_days = lv_avail_days + lv_flag7days.
+    zcl_hr0043_utils=>get_days_from_dates(
+           EXPORTING iv_pernr = lv_pernr
+           iv_begda = lv_begda
+           iv_endda = lv_endda
+           IMPORTING ev_days = lv_e_tage
+        ).
 
-    ELSEIF lv_check_take_hiddenadvance EQ 'A'."лимит есть,  остаток флаг1
-      rs_leave_duration-abrtg = lv_e_tage. "lv_rest_adv_days.
-      rs_leave_duration-time_unit_text = 'Дни'.
-      lv_avail_estim_days = lv_rest_adv_days.
 
-    ELSE. " E ошибка
-      rs_leave_duration-abrtg = 0.
-      rs_leave_duration-time_unit_text = ''.
-      RETURN.
-    ENDIF.
+    " --- check limit для 01 только
+    IF lv_ktart EQ '01'.
+
+      lv_avail_days = lv_diff2006_days - lv_p000_days - lv_reserved_days.
+
+
+      DATA(lv_check_take_hiddenadvance) =  zcl_hr0043_utils=>check_take_hidden_advance(
+                                    EXPORTING
+                                      iv_pernr = lv_pernr
+                                      iv_begda = lv_begda
+                                      iv_endda = lv_endda
+                                      iv_ktart = lv_ktart
+                                    IMPORTING
+                                      ev_rest_adv_days = lv_rest_adv_days
+      ).
+      IF lv_check_take_hiddenadvance IS INITIAL. " укладываемся в сущ диапазон значений,
+        rs_leave_duration-abrtg = lv_e_tage.
+        rs_leave_duration-time_unit_text = 'Дни'.
+        lv_avail_estim_days = lv_avail_days.
+
+      ELSEIF lv_check_take_hiddenadvance EQ 'G'. "лимита еще нет
+        IF lv_e_tage <= ( lv_avail_days + lv_flag7days ).
+          rs_leave_duration-abrtg = lv_e_tage.
+          rs_leave_duration-time_unit_text = 'Дни'.
+          lv_avail_estim_days = lv_avail_days + lv_flag7days.
+        ELSE.
+          rs_leave_duration-abrtg = 0.
+          rs_leave_duration-time_unit_text = ''.
+        ENDIF.
+
+      ELSEIF lv_check_take_hiddenadvance EQ 'A'."лимит есть,
+        rs_leave_duration-abrtg = lv_e_tage.
+        rs_leave_duration-time_unit_text = 'Дни'.
+        lv_avail_estim_days = lv_rest_adv_days.
+
+      ELSE. " E ошибка
+        rs_leave_duration-abrtg = 0.
+        rs_leave_duration-time_unit_text = ''.
+        RETURN.
+      ENDIF.
+    ELSEIF lv_ktart EQ '00'. " для 1006 и 2006
+      rs_leave_duration-abrtg = lv_e_tage.
+      rs_leave_duration-time_unit_text = 'Дни'.
+      lv_avail_estim_days = lv_e_tage.
+    ELSE. "  для остальных ktart
+
+      lv_avail_days = lv_diff2006_days - lv_reserved_days.
+
+      IF lv_e_tage <= lv_avail_days.
+        rs_leave_duration-abrtg = lv_e_tage.
+        rs_leave_duration-time_unit_text = 'Дни'.
+        lv_avail_estim_days = lv_e_tage.
+      ELSE.
+        rs_leave_duration-abrtg = 0.
+        rs_leave_duration-time_unit_text = ''.
+      ENDIF.
+    ENDIF. "ktart
 
 
   ENDMETHOD.
